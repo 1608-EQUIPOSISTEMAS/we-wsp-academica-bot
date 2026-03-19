@@ -1,0 +1,18 @@
+services:
+  we-whatsapp-bot:
+    container_name: we-whatsapp-bot
+    restart: always
+    build: .
+    expose:
+      - "3005"
+    env_file:
+      - .env
+    networks:
+      - red_publica
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+
+networks:
+  red_publica:
+    external: true

@@ -1,0 +1,22 @@
+services:
+  postgres:
+    container_name: we-bot-postgres
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     postgres
+      POSTGRES_PASSWORD: test123
+      POSTGRES_DB:       we_bot_test
+    ports:
+      - "5432:5432"
+    volumes:
+      - we_bot_pgdata:/var/lib/postgresql/data
+      - ./docker/seed.sql:/docker-entrypoint-initdb.d/seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d we_bot_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  we_bot_pgdata:

@@ -1,0 +1,26 @@
+{
+  "name": "we-whatsapp-bot",
+  "version": "1.0.0",
+  "description": "Bot de atención al cliente para W|E Educación Ejecutiva via WhatsApp",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "simulate": "node src/simulator.js",
+    "db:local": "docker compose -f docker-compose.dev.yml up -d",
+    "db:stop": "docker compose -f docker-compose.dev.yml down",
+    "db:seed": "docker exec -i we-bot-postgres psql -U postgres -d we_bot_test < docker/seed.sql"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.30.0",
+    "axios": "^1.7.0",
+    "dotenv": "^16.4.0",
+    "express": "^4.19.0",
+    "node-cache": "^5.1.2",
+    "openai": "^6.32.0",
+    "pg": "^8.12.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}
