@@ -26,7 +26,7 @@ const WA_LIMITS = {
 function trunc(value, max, label) {
   if (typeof value === 'string' && value.length > max) {
     console.warn(`[whatsapp] WARN: "${label}" excede ${max} chars (${value.length}) → truncado: "${value}"`);
-    return value.slice(0, max);
+    return value.slice(0, max - 1) + '…';
   }
   return value;
 }
@@ -187,4 +187,25 @@ async function sendList(phone, header, body, footer, buttonLabel, sections) {
     .catch(err => console.error('[whatsapp] Error en nota privada:', err));
 }
 
-module.exports = { sendText, sendButtons, sendButtonsWithHeader, sendList };
+async function sendCtaUrl(phone, bodyText, displayText, url) {
+  // 1. Mensaje interactivo CTA via Meta API
+  await metaSend({
+    messaging_product: 'whatsapp',
+    to:   phone,
+    type: 'interactive',
+    interactive: {
+      type: 'cta_url',
+      body: { text: bodyText },
+      action: {
+        name: 'cta_url',
+        parameters: { display_text: displayText, url },
+      },
+    },
+  });
+
+  // 2. Nota privada en Chatwoot — fire-and-forget
+  addPrivateNote(getConvId(phone), `🤖 Bot mostró enlace CTA:\n${bodyText}\n→ ${displayText}: ${url}`)
+    .catch(err => console.error('[whatsapp] Error en nota privada CTA:', err));
+}
+
+module.exports = { sendText, sendButtons, sendButtonsWithHeader, sendList, sendCtaUrl };

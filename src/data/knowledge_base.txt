@@ -5,7 +5,7 @@ BASE DE CONOCIMIENTO - W|E EDUCACIÓN EJECUTIVA
 
 LINKS Y CONTACTOS IMPORTANTES
 ----------------------------------------------------------------
-Campus virtual:         https://intranet.we-educacion.com/
+Campus virtual:         https://we-educacion.com/web/login
 Cursos online:          https://we-educacion.com/cursos-online
 Correo pagos/finanzas:  pagos@we-educacion.com
 Tutorial campus:        bit.ly/TutorialCVWE
@@ -21,7 +21,7 @@ CATEGORÍA 1: CAMPUS VIRTUAL
 
 ACCESO AL CAMPUS VIRTUAL
 ----------------------------------------------------------------
-URL: https://intranet.we-educacion.com/
+URL: https://we-educacion.com/web/login
 Usuario: correo con el que te inscribiste
 Contraseña inicial: 1234567
 
@@ -51,7 +51,7 @@ CATEGORÍA 2: CERTIFICADOS
 
 DÓNDE VER Y DESCARGAR EL CERTIFICADO
 ----------------------------------------------------------------
-1. Ingresar a https://intranet.we-educacion.com/ (preferentemente desde laptop)
+1. Ingresar a https://we-educacion.com/web/login (preferentemente desde laptop)
 2. Acceder con usuario (correo de inscripción) y contraseña
 3. En el menú lateral izquierdo ir a "Mis Certificados"
 4. Descargar el certificado desde ahí
@@ -120,7 +120,7 @@ CATEGORÍA 3: MATERIALES Y VIDEO CLASES
 ACCESO A MATERIALES
 ----------------------------------------------------------------
 Todos los materiales están disponibles en el campus virtual:
-https://intranet.we-educacion.com/
+https://we-educacion.com/web/login
 
 Los materiales están disponibles SOLO por 3 meses como máximo
 después de finalizado el curso. Se recomienda descargarlos

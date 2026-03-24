@@ -36,6 +36,7 @@ async function showMenuAcademico(phone) {
         { id: 'certificacion',   title: '🏅 Certificación',     description: 'Estado y tiempos' },
         { id: 'justificaciones', title: '📄 Justificaciones',   description: 'Gestiona tu inasistencia' },
         { id: 'alumno_flex',     title: '⚡ Alumno Flex',       description: 'Modalidad flexible' },
+        { id: 'inscripcion',     title: '📝 Inscribirme',       description: 'Inscripción a programas' },
         { id: 'menu_principal',  title: '🔙 Menú principal',    description: 'Volver al inicio' },
       ],
     }]

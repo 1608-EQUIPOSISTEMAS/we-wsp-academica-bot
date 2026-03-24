@@ -17,14 +17,19 @@ function getSession(phone) {
 
 function createSession(phone) {
   const session = {
-    conversationId:    null,   // ID de conversación en Chatwoot (se rellena al primer mensaje)
-    nombre:            null,
-    correo:            null,
-    estado:            'inicio',
-    ultimoTema:        null,
-    pendingData:       null,   // datos temporales entre pasos de un flow
-    historial:         [],
-    ultimaInteraccion: Date.now(),
+    conversationId:      null,   // ID de conversación en Chatwoot
+    nombre:              null,
+    correo:              null,
+    estado:              'inicio',
+    ultimoTema:          null,
+    pendingData:         null,   // datos temporales entre pasos de un flow
+    historial:           [],
+    en_atencion_humana:  false,  // true mientras un agente humano atiende
+    conv_assigned_agent: null,   // ID del agente asignado
+    ultimaActividad:     Date.now(), // última vez que el alumno envió un mensaje
+    resuelto_bot_at:     null,   // timestamp cuando se preguntó "¿Algo más?"
+    estado_inactividad:  null,   // null | 'advertido' | 'resuelto'
+    ultimaInteraccion:   Date.now(),
   };
   sessions.set(phone, session);
   return session;
@@ -71,6 +76,10 @@ setInterval(() => {
   }
 }, CLEANUP_INTERVAL);
 
+function getAllSessions() {
+  return sessions;
+}
+
 module.exports = {
   getSession,
   createSession,
@@ -78,4 +87,5 @@ module.exports = {
   updateSession,
   deleteSession,
   addToHistory,
+  getAllSessions,
 };

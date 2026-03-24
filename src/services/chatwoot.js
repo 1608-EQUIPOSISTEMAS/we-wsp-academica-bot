@@ -53,6 +53,51 @@ async function addPrivateNote(conversationId, content) {
   });
 }
 
+// ── Cambiar estado de conversación ───────────────────────────────────────────
+
+async function resolveConversation(conversationId) {
+  try {
+    await axios.post(
+      apiUrl(`/accounts/${ACCOUNT_ID}/conversations/${conversationId}/toggle_status`),
+      { status: 'resolved' },
+      { headers: getHeaders() }
+    );
+    console.log(`[chatwoot] Conversación ${conversationId} resuelta`);
+  } catch (err) {
+    console.error('[chatwoot] Error resolveConversation:', err.response?.data || err.message);
+  }
+}
+
+async function openConversation(conversationId) {
+  console.log('[chatwoot] Abriendo conversación:', conversationId);
+  try {
+    const response = await axios.post(
+      apiUrl(`/accounts/${ACCOUNT_ID}/conversations/${conversationId}/toggle_status`),
+      { status: 'open' },
+      { headers: getHeaders() }
+    );
+    console.log('[chatwoot] openConversation response:', response.status);
+    console.log('[chatwoot] openConversation body:', JSON.stringify(response.data));
+  } catch (err) {
+    console.error('[chatwoot] Error openConversation:', err.response?.data || err.message);
+  }
+}
+
+// ── Desactivar agent bot en una conversación ─────────────────────────────────
+
+async function deactivateBot(conversationId) {
+  try {
+    await axios.patch(
+      apiUrl(`/accounts/${ACCOUNT_ID}/conversations/${conversationId}`),
+      { agent_bot: null },
+      { headers: getHeaders() }
+    );
+    console.log(`[chatwoot] Bot desactivado en conversación ${conversationId}`);
+  } catch (err) {
+    console.error('[chatwoot] Error deactivateBot:', err.response?.data || err.message);
+  }
+}
+
 // ── Etiquetas ─────────────────────────────────────────────────────────────────
 
 async function setLabels(conversationId, labels) {
@@ -96,6 +141,21 @@ async function assignTeam(conversationId, teamId) {
   }
 }
 
+// ── Asignación de agente ──────────────────────────────────────────────────────
+
+async function assignAgent(conversationId, agentId) {
+  if (!agentId) return;
+  try {
+    await axios.post(
+      apiUrl(`/accounts/${ACCOUNT_ID}/conversations/${conversationId}/assignments`),
+      { assignee_id: Number(agentId) },
+      { headers: getHeaders() }
+    );
+  } catch (err) {
+    console.error('[chatwoot] Error assignAgent:', err.response?.data || err.message);
+  }
+}
+
 // ── Helpers fire-and-forget ───────────────────────────────────────────────────
 
 /**
@@ -125,9 +185,13 @@ function tagAlumno(phone, nombre, correo) {
 module.exports = {
   postMessage,
   addPrivateNote,
+  resolveConversation,
+  openConversation,
+  deactivateBot,
   setLabels,
   setCustomAttributes,
   assignTeam,
+  assignAgent,
   tagFlow,
   tagAlumno,
 };

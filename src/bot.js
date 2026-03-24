@@ -1,4 +1,6 @@
-const { getOrCreateSession, updateSession, addToHistory } = require('./services/session');
+const { getSession, getOrCreateSession, updateSession, addToHistory } = require('./services/session');
+const { assignAgent, openConversation } = require('./services/chatwoot');
+const { showBotResuelto, handleBotResuelto } = require('./flows/resuelto');
 const { sendText, sendButtons }   = require('./services/whatsapp');
 const { askAI }                   = require('./services/ai');
 const { runTransfer }             = require('./flows/transfer');
@@ -10,10 +12,13 @@ const {
 } = require('./flows/identificacion');
 const { showCampus, handleCampusReply }                  = require('./flows/campus');
 const { showCertificados, handleCertReply }              = require('./flows/certificados');
-const { showJustificaciones, handleJustificacionDatos }  = require('./flows/justificaciones');
+const { showJustificaciones, handleJustificacionReply }  = require('./flows/justificaciones');
+const { showExamenes, handleExamenesReply }              = require('./flows/examenes');
 const { showMateriales, handleMaterialesReply }          = require('./flows/materiales');
 const { showInstaladores, handleInstaladoresReply }      = require('./flows/instaladores');
 const { handleReclamoDatos }                             = require('./flows/reclamo');
+const { showAlumnoFlex, handleAlumnoFlexReply }          = require('./flows/alumno_flex');
+const { showInscripcion }                               = require('./flows/inscripcion');
 
 // ── Anti-duplicado ─────────────────────────────────────────────────────────────
 const processedIds  = new Set();
@@ -53,36 +58,51 @@ const TEXT_TO_ID = {
   '✅ Sí, gracias':                        'campus_ok',
   '❌ No pude ingresar':                   'campus_no',
   // ── Certificación — modalidad ───────────────────────────────────────────
-  '🏫 Presencial / En vivo':               'cert_pres_en_vivo',
+  '🏫 Pres. / En vivo':                    'cert_pres_en_vivo',
   '💻 Online':                             'cert_online',
   // ── Certificación — tipo programa (AMBIGUO: '📘 Curso' resuelto por estado)
-  '📗 Especialización / Diplomado / PEE':  'cert_pres_prog',
+  '📗 Espec./Dipl./PEE':                   'cert_pres_prog',
   '📗 Especialización':                    'cert_online_espec',
   // ── Certificación — plazo ───────────────────────────────────────────────
-  '✅ No, aún estoy en el plazo':          'cert_en_plazo',
-  '⚠️ Sí, ya pasó el plazo':              'cert_fuera_plazo',
+  '✅ Aún en el plazo':                    'cert_en_plazo',
+  '⚠️ Ya pasó el plazo':                  'cert_fuera_plazo',
   // ── Certificación — confirmación ────────────────────────────────────────
   '✅ Entendido':                          'cert_ok',
   '❓ Tengo otra duda':                    'cert_otra_duda',
   // ── Materiales ──────────────────────────────────────────────────────────
   '✅ Ya tengo acceso':                    'mat_ok',
-  '❌ No encuentro mis materiales':        'mat_no_acceso',
+  '❌ No veo materiales':                  'mat_no_acceso',
   // ── Instaladores — selector de programa ────────────────────────────────
   'SAP HANA':                              'inst_hana',
   'SAP R/3':                               'inst_r3',
   'Office 365':                            'inst_o365',
   'Otro problema':                         'inst_otro',
-  // ── Instaladores — SAP HANA (AMBIGUO: '🔑 No puedo ingresar...' resuelto por estado)
-  '⏳ Se queda cargando al ejecutar':      'inst_hana_cargando',
-  '📥 No pude instalarlo':                 'inst_hana_instalacion',
+  // ── Instaladores — SAP HANA (AMBIGUO: '🔑 Clave / Acceso' resuelto por estado)
+  '⏳ Se queda cargando':                  'inst_hana_cargando',
+  '📥 No pude instalar':                   'inst_hana_instalacion',
   // ── Instaladores — SAP R/3 ──────────────────────────────────────────────
   '❓ Otro problema':                      'inst_r3_otro',
   // ── Instaladores — resultado ────────────────────────────────────────────
   '✅ Sí, ya pude':                        'inst_ok',
-  '❌ No, sigue el problema':              'inst_no',
+  '❌ Sigue el problema':                  'inst_no',
   // ── Instaladores — tipo de laptop ───────────────────────────────────────
   '💻 Personal':                           'inst_laptop_personal',
   '🏢 Corporativa':                        'inst_laptop_corp',
+  // ── Inscripción ─────────────────────────────────────────────────────────
+  '📝 Inscribirme':                        'inscripcion',
+  // ── Justificaciones ──────────────────────────────────────────────────────
+  '✅ Listo, ya llené':                    'just_listo',
+  '❌ El link no abre':                    'just_link_falla',
+  '❓ Tengo otra duda':                    'just_otra_duda',
+  // ── Exámenes Internacionales ─────────────────────────────────────────────
+  '✅ Llené el form':                      'exam_formulario_ok',
+  '❓ Una pregunta':                       'exam_pregunta',
+  // ── Alumno Flex ──────────────────────────────────────────────────────────
+  '✅ Ya llené el form':                   'flex_formulario_ok',
+  '❓ Tengo más dudas':                    'flex_mas_dudas',
+  // ── Cierre bot (resuelto_bot) ────────────────────────────────────────────
+  '✅ No, es todo':                        'bot_resuelto_no',
+  '📋 Ver menú':                           'bot_resuelto_menu',
   // ── Identificación ──────────────────────────────────────────────────────
   'Intentar otro correo':                  'reintentar_correo',
   'Hablar con un asesor':                  'hablar_asesor',
@@ -113,7 +133,7 @@ function resolveTextToId(text) {
 
 // Versiones normalizadas de los títulos ambiguos para comparación flexible
 const NORM_CURSO      = normalizeText('📘 Curso');
-const NORM_CONTRASENA = normalizeText('🔑 No puedo ingresar / contraseña');
+const NORM_CONTRASENA = normalizeText('🔑 Clave / Acceso');
 
 // ── Palabras clave globales → menú principal ──────────────────────────────────
 const KEYWORDS_MENU = new Set(['menu', 'inicio', 'volver', 'start']);
@@ -128,7 +148,23 @@ async function handleIncoming(conversationId, phone, msg) {
   }
   markProcessed(msg.id);
 
-  const session = updateSession(phone, { conversationId });
+  const isNewSession = !getSession(phone);
+  const session = updateSession(phone, { conversationId, ultimaActividad: Date.now() });
+
+  // Al inicio de cada conversación nueva: pasar de pending → open + asignar agente
+  // Delay de 2s para que Chatwoot termine de procesar la conversación nueva
+  if (isNewSession && conversationId) {
+    setTimeout(async () => {
+      await openConversation(conversationId).catch(err =>
+        console.error('[bot] Error abriendo conversación:', err)
+      );
+      if (process.env.CHATWOOT_DEFAULT_AGENT_ID) {
+        await assignAgent(conversationId, process.env.CHATWOOT_DEFAULT_AGENT_ID).catch(err =>
+          console.error('[bot] Error asignando agente inicial:', err)
+        );
+      }
+    }, 2000);
+  }
 
   let text     = null;
   let buttonId = null;
@@ -184,8 +220,9 @@ async function handleIncoming(conversationId, phone, msg) {
 async function route(phone, session, { text, buttonId, listId }) {
   const id = buttonId || listId;
 
-  // Palabras clave globales — siempre vuelven al menú principal
-  if (text && KEYWORDS_MENU.has(text.toLowerCase().trim()) && session.nombre) {
+  // Palabras clave globales → menú principal (excepto si está con agente humano)
+  if (text && KEYWORDS_MENU.has(normalizeText(text)) && session.nombre
+      && session.estado !== 'en_atencion_humana') {
     return showMenu(phone, session.nombre);
   }
 
@@ -194,12 +231,16 @@ async function route(phone, session, { text, buttonId, listId }) {
     case 'inicio':
       return startIdentificacion(phone);
 
-    case 'transferido': {
-      const replies = session.transfer_replies ?? 0;
-      if (replies < 2) {
-        updateSession(phone, { transfer_replies: replies + 1 });
-        await sendText(phone, 'Ya hemos notificado a un asesor 💙 Por favor espera, te atenderán en breve.');
+    // ── En atención humana — bot silenciado salvo palabras reservadas ─────────
+    case 'en_atencion_humana':
+    case 'transferido': {  // 'transferido' como alias de compatibilidad
+      const normalized = normalizeText(text || '');
+      if (normalized === 'menu' || normalized === 'bot') {
+        await sendText(phone,
+          `En este momento un asesor te está atendiendo 💙\nPor favor espera su respuesta.`
+        );
       }
+      // Silencio total para cualquier otro mensaje
       return;
     }
 
@@ -215,6 +256,12 @@ async function route(phone, session, { text, buttonId, listId }) {
     case 'flow_menu_principal':
       if (id)   return handleMenuPrincipalReply(phone, id, session);
       if (text) return handleFreeText(phone, text, session);
+      return;
+
+    // ── ¿Algo más? — confirmación de cierre bot ────────────────────────────
+    case 'resuelto_bot':
+      if (id)   return handleBotResuelto(phone, id, session);
+      if (text) return handleBotResuelto(phone, 'bot_resuelto_menu', session);
       return;
 
     // ── Campus Virtual ─────────────────────────────────────────────────────
@@ -241,17 +288,31 @@ async function route(phone, session, { text, buttonId, listId }) {
       return;
     }
 
-    // ── Reclamo / Justificaciones / Grupo — esperan texto libre ───────────
+    // ── Justificaciones ────────────────────────────────────────────────────
+    case 'flow_justificacion_info':
+      if (id)   return handleJustificacionReply(phone, id, session);
+      if (text) return handleFreeText(phone, text, session);
+      return;
+
+    // ── Exámenes Internacionales ───────────────────────────────────────────
+    case 'flow_examenes':
+      if (id)   return handleExamenesReply(phone, id, session);
+      if (text) return handleFreeText(phone, text, session);
+      return;
+
+    // ── Reclamo / Grupo — esperan texto libre ──────────────────────────────
     case 'flow_reclamo_datos':
       if (text) return handleReclamoDatos(phone, text, session);
       return;
 
-    case 'flow_justificacion_datos':
-      if (text) return handleJustificacionDatos(phone, text, session);
-      return;
-
     case 'flow_grupo_datos':
       if (text) return runTransfer(phone, { ...session, ultimoTema: 'grupo_whatsapp' }, text);
+      return;
+
+    // ── Alumno Flex ────────────────────────────────────────────────────────
+    case 'flow_alumno_flex':
+      if (id)   return handleAlumnoFlexReply(phone, id, session);
+      if (text) return handleFreeText(phone, text, session);
       return;
 
     // ── Materiales ─────────────────────────────────────────────────────────
@@ -298,12 +359,15 @@ async function handleMenuOption(phone, optionId, session) {
   updateSession(phone, { ultimoTema: optionId });
 
   switch (optionId) {
-    case 'campus_virtual':    return showCampus(phone);
+    case 'campus_virtual':    return showCampus(phone, session);
     case 'certificacion':     return showCertificados(phone);
-    case 'justificaciones':   return showJustificaciones(phone);
+    case 'justificaciones':   return showJustificaciones(phone, session);
     case 'materiales':
     case 'video_clases':      return showMateriales(phone, optionId);
     case 'instaladores':      return showInstaladores(phone);
+    case 'alumno_flex':       return showAlumnoFlex(phone);
+    case 'inscripcion':       return showInscripcion(phone, session);
+    case 'examenes_int':      return showExamenes(phone);
 
     case 'grupo_whatsapp':
       updateSession(phone, { estado: 'flow_grupo_datos' });
@@ -313,19 +377,18 @@ async function handleMenuOption(phone, optionId, session) {
       return;
 
     case 'hablar_asesor':
-    case 'alumno_flex':
     case 'funciones_docente':
-    case 'examenes_int':
     case 'cronograma':
       return runTransfer(phone, session);
 
     case 'menu_principal':
     case 'volver_menu':
-    case 'cert_ok':
     case 'cert_otra_duda':
-    case 'campus_ok':
-    case 'mat_ok':
+    case 'bot_resuelto_menu':
       return showMenu(phone, session.nombre);
+
+    case 'bot_resuelto_no':
+      return handleBotResuelto(phone, 'bot_resuelto_no', session);
 
     case 'cert_asesor':
       return runTransfer(phone, session);

@@ -1,16 +1,23 @@
-const { sendText, sendButtons } = require('../services/whatsapp');
-const { findAlumnoByEmail }     = require('../services/database');
-const { updateSession }         = require('../services/session');
-const { tagFlow, tagAlumno }    = require('../services/chatwoot');
-const { showMenu }              = require('./menu');
-const { runTransfer }           = require('./transfer');
+const { sendText, sendButtons }               = require('../services/whatsapp');
+const { findAlumnoByEmail }                   = require('../services/database');
+const { updateSession }                       = require('../services/session');
+const { tagFlow, tagAlumno }                  = require('../services/chatwoot');
+const { showMenu }                            = require('./menu');
+const { runTransfer }                         = require('./transfer');
+const { isWithinBusinessHours, getScheduleText } = require('../services/schedule');
 
 async function startIdentificacion(phone) {
-  await sendText(
-    phone,
-    `👋 ¡Hola! Bienvenido/a a *W|E Educación Ejecutiva* 💙\n\n` +
-    `Para brindarte una mejor atención, por favor indícanos el correo con el que te inscribiste:`
-  );
+  const dentroHorario = isWithinBusinessHours();
+
+  const mensaje = dentroHorario
+    ? `👋 ¡Hola! Bienvenido/a a *W|E Educación Ejecutiva* 💙\n\n` +
+      `Para brindarte una mejor atención, por favor indícanos el correo con el que te inscribiste:`
+    : `👋 ¡Hola! Bienvenido/a a *W|E Educación Ejecutiva* 💙\n\n` +
+      `En este momento nuestros asesores no están disponibles, pero puedo ayudarte con consultas automáticas 🤖\n\n` +
+      `⏰ *Horario de atención:*\n${getScheduleText()}\n\n` +
+      `Por favor indícanos el correo con el que te inscribiste:`;
+
+  await sendText(phone, mensaje);
   updateSession(phone, { estado: 'esperando_correo' });
   tagFlow(phone, ['bot-activo']);
 }

@@ -3,6 +3,7 @@ const { updateSession }                   = require('../services/session');
 const { tagFlow }                         = require('../services/chatwoot');
 const { runTransfer }                     = require('./transfer');
 const { showMenu }                        = require('./menu');
+const { showBotResuelto }                 = require('./resuelto');
 
 // ── Textos reutilizables ──────────────────────────────────────────────────────
 const MSG_CLAVE_HANA =
@@ -23,7 +24,7 @@ const MSG_CORPORATIVA =
 
 const BTNS_RESULTADO = [
   { id: 'inst_ok', title: '✅ Sí, ya pude' },
-  { id: 'inst_no', title: '❌ No, sigue el problema' },
+  { id: 'inst_no', title: '❌ Sigue el problema' },
 ];
 
 // ── Helper: pedir tipo de laptop antes del transfer ───────────────────────────
@@ -74,9 +75,9 @@ async function handleInstaladoresReply(phone, buttonId, session) {
       phone,
       `¿Cuál es tu problema con SAP HANA?`,
       [
-        { id: 'inst_hana_clave',      title: '🔑 No puedo ingresar / contraseña' },
-        { id: 'inst_hana_cargando',   title: '⏳ Se queda cargando al ejecutar' },
-        { id: 'inst_hana_instalacion',title: '📥 No pude instalarlo' },
+        { id: 'inst_hana_clave',      title: '🔑 Clave / Acceso' },
+        { id: 'inst_hana_cargando',   title: '⏳ Se queda cargando' },
+        { id: 'inst_hana_instalacion',title: '📥 No pude instalar' },
       ]
     );
 
@@ -86,7 +87,7 @@ async function handleInstaladoresReply(phone, buttonId, session) {
       phone,
       `¿Cuál es tu problema con SAP R/3?`,
       [
-        { id: 'inst_r3_clave', title: '🔑 No puedo ingresar / contraseña' },
+        { id: 'inst_r3_clave', title: '🔑 Clave / Acceso' },
         { id: 'inst_r3_otro',  title: '❓ Otro problema' },
       ]
     );
@@ -124,12 +125,11 @@ async function handleInstaladoresReply(phone, buttonId, session) {
   // ── Resultado: solucionado ─────────────────────────────────────────────
   } else if (buttonId === 'inst_ok') {
     tagFlow(phone, ['resuelto-bot', 'instaladores']);
-    updateSession(phone, { estado: 'menu' });
     await sendText(
       phone,
-      `¡Excelente! 🎉 Me alegra que hayas podido solucionarlo.\nCualquier otra consulta estamos aquí para ayudarte 💙`
+      `¡Excelente! 🎉 Me alegra que hayas podido solucionarlo.`
     );
-    await showMenu(phone, session.nombre);
+    await showBotResuelto(phone);
 
   // ── Resultado: sigue el problema → pedir laptop ────────────────────────
   } else if (buttonId === 'inst_no') {

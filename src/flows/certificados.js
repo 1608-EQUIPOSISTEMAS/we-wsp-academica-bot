@@ -4,6 +4,7 @@ const { tagFlow }               = require('../services/chatwoot');
 const { runTransfer }           = require('./transfer');
 const { showMenu }              = require('./menu');
 const { askReclamoDatos }       = require('./reclamo');
+const { showBotResuelto }       = require('./resuelto');
 
 // ── Tabla de tiempos ─────────────────────────────────────────────────────────
 // Presencial/En vivo + Curso          → 7 días  → campus virtual
@@ -43,7 +44,7 @@ async function showCertificados(phone) {
     phone,
     `¿Tu programa es presencial/en vivo u online?`,
     [
-      { id: 'cert_pres_en_vivo', title: '🏫 Presencial / En vivo' },
+      { id: 'cert_pres_en_vivo', title: '🏫 Pres. / En vivo' },
       { id: 'cert_online',       title: '💻 Online' },
     ]
   );
@@ -60,7 +61,7 @@ async function handleCertReply(phone, buttonId, session) {
       `¿Tu certificado es de un curso o de un programa?`,
       [
         { id: 'cert_pres_curso', title: '📘 Curso' },
-        { id: 'cert_pres_prog',  title: '📗 Especialización / Diplomado / PEE' },
+        { id: 'cert_pres_prog',  title: '📗 Espec./Dipl./PEE' },
       ]
     );
 
@@ -87,8 +88,8 @@ async function handleCertReply(phone, buttonId, session) {
       `🚨 ${info.nota}\n\n` +
       `¿Ya pasaron esos días hábiles y aún no tienes tu certificado?`,
       [
-        { id: 'cert_en_plazo',    title: '✅ No, aún estoy en el plazo' },
-        { id: 'cert_fuera_plazo', title: '⚠️ Sí, ya pasó el plazo' },
+        { id: 'cert_en_plazo',    title: '✅ Aún en el plazo' },
+        { id: 'cert_fuera_plazo', title: '⚠️ Ya pasó el plazo' },
       ]
     );
 
@@ -98,7 +99,7 @@ async function handleCertReply(phone, buttonId, session) {
     await sendButtons(
       phone,
       `Perfecto 😊 Cuando llegue el momento, podrás descargarlo desde:\n` +
-      `🔗 https://intranet.we-educacion.com/ → *Mis Certificados*`,
+      `🔗 https://we-educacion.com/web/login → *Mis Certificados*`,
       [
         { id: 'cert_ok',        title: '✅ Entendido' },
         { id: 'cert_otra_duda', title: '❓ Tengo otra duda' },
@@ -115,8 +116,11 @@ async function handleCertReply(phone, buttonId, session) {
     );
 
   // ── Confirmaciones finales ──────────────────────────────────────────────
-  } else if (buttonId === 'cert_ok' || buttonId === 'cert_otra_duda') {
+  } else if (buttonId === 'cert_ok') {
     tagFlow(phone, ['resuelto-bot', 'certificados']);
+    await showBotResuelto(phone);
+
+  } else if (buttonId === 'cert_otra_duda') {
     updateSession(phone, { estado: 'menu' });
     await showMenu(phone, session.nombre);
 
