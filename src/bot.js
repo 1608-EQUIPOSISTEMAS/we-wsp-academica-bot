@@ -1,8 +1,10 @@
-const { getSession, getOrCreateSession, updateSession, addToHistory } = require('./services/session');
+const { getSession, getOrCreateSession, updateSession, addToHistory, deleteSession } = require('./services/session');
+const { createCsat } = require('./services/database');
 const { assignAgent, openConversation } = require('./services/chatwoot');
 const { showBotResuelto, handleBotResuelto } = require('./flows/resuelto');
-const { sendText, sendButtons }   = require('./services/whatsapp');
-const { askAI }                   = require('./services/ai');
+const { sendText, sendButtons, sendList } = require('./services/whatsapp');
+const { buildProgramRows, PAGE_SIZE }     = require('./utils/programList');
+const { detectIntent }            = require('./services/ai');
 const { runTransfer }             = require('./flows/transfer');
 const { showMenu, handleMenuPrincipalReply } = require('./flows/menu');
 const {
@@ -16,7 +18,7 @@ const { showJustificaciones, handleJustificacionReply }  = require('./flows/just
 const { showExamenes, handleExamenesReply }              = require('./flows/examenes');
 const { showMateriales, handleMaterialesReply }          = require('./flows/materiales');
 const { showInstaladores, handleInstaladoresReply }      = require('./flows/instaladores');
-const { handleReclamoDatos }                             = require('./flows/reclamo');
+const { askReclamoDatos, handleReclamoDatos }             = require('./flows/reclamo');
 const { showAlumnoFlex, handleAlumnoFlexReply }          = require('./flows/alumno_flex');
 const { showInscripcion }                               = require('./flows/inscripcion');
 
@@ -100,6 +102,15 @@ const TEXT_TO_ID = {
   // ── Alumno Flex ──────────────────────────────────────────────────────────
   '✅ Ya llené el form':                   'flex_formulario_ok',
   '❓ Tengo más dudas':                    'flex_mas_dudas',
+  // ── Paginación de programas ──────────────────────────────────────────────
+  '➕ Ver más programas':                  'prog_ver_mas',
+  '⬅️ Página anterior':                   'prog_anterior',
+  // ── CSAT ────────────────────────────────────────────────────────────────
+  '⭐ 1':                                  'csat_1',
+  '⭐⭐ 2':                                'csat_2',
+  '⭐⭐⭐ 3':                              'csat_3',
+  '⭐⭐⭐⭐ 4':                            'csat_4',
+  '⭐⭐⭐⭐⭐ 5':                          'csat_5',
   // ── Cierre bot (resuelto_bot) ────────────────────────────────────────────
   '✅ No, es todo':                        'bot_resuelto_no',
   '📋 Ver menú':                           'bot_resuelto_menu',
@@ -134,6 +145,34 @@ function resolveTextToId(text) {
 // Versiones normalizadas de los títulos ambiguos para comparación flexible
 const NORM_CURSO      = normalizeText('📘 Curso');
 const NORM_CONTRASENA = normalizeText('🔑 Clave / Acceso');
+
+/**
+ * Busca en session.programOptions el programa que coincida con el texto
+ * enviado por el alumno (Chatwoot a veces envía el título visible en vez del ID).
+ *
+ * Compara contra program_name completo Y contra los primeros 24 chars
+ * (límite que WhatsApp aplica al título de cada fila de lista).
+ *
+ * @returns {{ program: Object, index: number } | null}
+ */
+function resolveProgram(text, programOptions) {
+  if (!programOptions?.length || !text) return null;
+  const normText = normalizeText(text);
+  for (let i = 0; i < programOptions.length; i++) {
+    const p         = programOptions[i];
+    const normFull  = normalizeText(p.program_name || '');
+    const normTitle = normFull.slice(0, 24); // WhatsApp trunca a 24 chars en la lista
+    if (
+      normFull  === normText ||
+      normTitle === normText ||
+      normFull.includes(normText) ||
+      normText.includes(normTitle)
+    ) {
+      return { program: p, index: i };
+    }
+  }
+  return null;
+}
 
 // ── Palabras clave globales → menú principal ──────────────────────────────────
 const KEYWORDS_MENU = new Set(['menu', 'inicio', 'volver', 'start']);
@@ -244,6 +283,21 @@ async function route(phone, session, { text, buttonId, listId }) {
       return;
     }
 
+    // ── Esperando respuesta CSAT ───────────────────────────────────────────
+    case 'esperando_csat': {
+      // Botón o id resuelto por TEXT_TO_ID
+      if (id?.startsWith('csat_')) {
+        const rating = parseInt(id.split('_')[1], 10);
+        return handleCsatReply(phone, rating, session);
+      }
+      // Texto libre: aceptar dígito 1-5 directamente
+      if (text) {
+        const n = parseInt(text.trim(), 10);
+        if (n >= 1 && n <= 5) return handleCsatReply(phone, n, session);
+      }
+      return; // ignorar cualquier otra respuesta
+    }
+
     case 'esperando_correo':
       if (text) return handleCorreo(phone, text, session);
       return;
@@ -266,16 +320,28 @@ async function route(phone, session, { text, buttonId, listId }) {
 
     // ── Campus Virtual ─────────────────────────────────────────────────────
     case 'flow_campus':
-      if (id)   return handleCampusReply(phone, id, session);
-      if (text) return handleFreeText(phone, text, session);
-      return;
+      if (id) return handleCampusReply(phone, id, session);
+      return; // texto libre ignorado — el alumno debe usar los botones
 
-    // ── Certificación ──────────────────────────────────────────────────────
+    // ── Certificación — Rama B: selección de programa ─────────────────────
+    case 'flow_cert_programa': {
+      if (id) return handleCertReply(phone, id, session);
+      if (text) {
+        const match = resolveProgram(text, session.programOptions);
+        if (match) return handleCertReply(phone, `cert_prog_${match.index}`, session);
+        await sendText(phone,
+          `No reconocí esa opción 😊\nPor favor selecciona una de las opciones de la lista.`
+        );
+        return _reshowProgramList(phone, session, 'cert');
+      }
+      return;
+    }
+
+    // ── Certificación — flujo Rama A ────────────────────────────────────────
     case 'flow_cert_modalidad':
     case 'flow_cert_plazo':
     case 'flow_cert_info':
-      if (id)   return handleCertReply(phone, id, session);
-      if (text) return handleFreeText(phone, text, session);
+      if (id) return handleCertReply(phone, id, session);
       return;
 
     case 'flow_cert_tipo': {
@@ -284,23 +350,20 @@ async function route(phone, session, { text, buttonId, listId }) {
         ? (session.certTrack === 'online' ? 'cert_online_curso' : 'cert_pres_curso')
         : null);
       if (certId) return handleCertReply(phone, certId, session);
-      if (text)   return handleFreeText(phone, text, session);
       return;
     }
 
     // ── Justificaciones ────────────────────────────────────────────────────
     case 'flow_justificacion_info':
-      if (id)   return handleJustificacionReply(phone, id, session);
-      if (text) return handleFreeText(phone, text, session);
+      if (id) return handleJustificacionReply(phone, id, session);
       return;
 
     // ── Exámenes Internacionales ───────────────────────────────────────────
     case 'flow_examenes':
-      if (id)   return handleExamenesReply(phone, id, session);
-      if (text) return handleFreeText(phone, text, session);
+      if (id) return handleExamenesReply(phone, id, session);
       return;
 
-    // ── Reclamo / Grupo — esperan texto libre ──────────────────────────────
+    // ── Reclamo / Grupo — esperan texto libre del alumno ──────────────────
     case 'flow_reclamo_datos':
       if (text) return handleReclamoDatos(phone, text, session);
       return;
@@ -309,16 +372,29 @@ async function route(phone, session, { text, buttonId, listId }) {
       if (text) return runTransfer(phone, { ...session, ultimoTema: 'grupo_whatsapp' }, text);
       return;
 
-    // ── Alumno Flex ────────────────────────────────────────────────────────
+    // ── Alumno Flex — Rama B: selección de programa ───────────────────────
+    case 'flow_flex_programa': {
+      if (id) return handleAlumnoFlexReply(phone, id, session);
+      if (text) {
+        const match = resolveProgram(text, session.programOptions);
+        if (match) return handleAlumnoFlexReply(phone, `flex_prog_${match.index}`, session);
+        await sendText(phone,
+          `No reconocí esa opción 😊\nPor favor selecciona una de las opciones de la lista.`
+        );
+        return _reshowProgramList(phone, session, 'flex');
+      }
+      return;
+    }
+
+    // ── Alumno Flex — Rama A / info ────────────────────────────────────────
     case 'flow_alumno_flex':
-      if (id)   return handleAlumnoFlexReply(phone, id, session);
-      if (text) return handleFreeText(phone, text, session);
+    case 'flow_flex_info':     // Rama B: mostrando info + formulario
+      if (id) return handleAlumnoFlexReply(phone, id, session);
       return;
 
     // ── Materiales ─────────────────────────────────────────────────────────
     case 'flow_materiales':
-      if (id)   return handleMaterialesReply(phone, id, session);
-      if (text) return handleFreeText(phone, text, session);
+      if (id) return handleMaterialesReply(phone, id, session);
       return;
 
     // ── Instaladores ──────────────────────────────────────────────────────
@@ -327,22 +403,19 @@ async function route(phone, session, { text, buttonId, listId }) {
     case 'flow_inst_hana_cargando_ok':
     case 'flow_inst_r3_clave_ok':
     case 'flow_inst_laptop':
-      if (id)   return handleInstaladoresReply(phone, id, session);
-      if (text) return handleFreeText(phone, text, session);
+      if (id) return handleInstaladoresReply(phone, id, session);
       return;
 
     case 'flow_inst_hana_problema':
       if (id) return handleInstaladoresReply(phone, id, session);
       if (normalizeText(text) === NORM_CONTRASENA)
         return handleInstaladoresReply(phone, 'inst_hana_clave', session);
-      if (text) return handleFreeText(phone, text, session);
       return;
 
     case 'flow_inst_r3_problema':
       if (id) return handleInstaladoresReply(phone, id, session);
       if (normalizeText(text) === NORM_CONTRASENA)
         return handleInstaladoresReply(phone, 'inst_r3_clave', session);
-      if (text) return handleFreeText(phone, text, session);
       return;
 
     // ── Menú principal / default ───────────────────────────────────────────
@@ -355,17 +428,53 @@ async function route(phone, session, { text, buttonId, listId }) {
   }
 }
 
+/**
+ * Re-muestra la lista de programas desde session.programOptions (sin query a DB).
+ * Se usa cuando el alumno escribe texto que no coincide con ningún programa.
+ * @param {'cert'|'flex'} tipo
+ */
+async function _reshowProgramList(phone, session, tipo) {
+  const programs = session.programOptions || [];
+  if (!programs.length) return;
+
+  const page   = session.programPage ?? 0;
+  const rows   = buildProgramRows(programs, page, tipo);
+  const total  = programs.length;
+  const pages  = Math.ceil(total / PAGE_SIZE);
+  const footer = pages > 1 ? `Página ${page + 1} de ${pages}` : 'Selecciona un programa';
+
+  if (tipo === 'cert') {
+    await sendList(
+      phone,
+      'Mis Programas',
+      '¿Sobre cuál de tus programas tienes consulta de certificación? 📋',
+      footer,
+      '📋 Ver programas',
+      [{ title: 'Tus programas', rows }]
+    );
+  } else {
+    await sendList(
+      phone,
+      'Mis Programas',
+      '¿Para cuál de tus programas deseas solicitar la modalidad Flex? ⚡',
+      footer,
+      '📋 Ver programas',
+      [{ title: 'Programas Presenciales / En vivo', rows }]
+    );
+  }
+}
+
 async function handleMenuOption(phone, optionId, session) {
   updateSession(phone, { ultimoTema: optionId });
 
   switch (optionId) {
     case 'campus_virtual':    return showCampus(phone, session);
-    case 'certificacion':     return showCertificados(phone);
+    case 'certificacion':     return showCertificados(phone, session);
     case 'justificaciones':   return showJustificaciones(phone, session);
     case 'materiales':
     case 'video_clases':      return showMateriales(phone, optionId);
     case 'instaladores':      return showInstaladores(phone);
-    case 'alumno_flex':       return showAlumnoFlex(phone);
+    case 'alumno_flex':       return showAlumnoFlex(phone, session);
     case 'inscripcion':       return showInscripcion(phone, session);
     case 'examenes_int':      return showExamenes(phone);
 
@@ -398,52 +507,79 @@ async function handleMenuOption(phone, optionId, session) {
   }
 }
 
-// ── Nivel 2: IA para texto libre ─────────────────────────────────────────────
+// ── Nivel 2: detección de intención ──────────────────────────────────────────
+
+const INTENT_CONFIDENCE_THRESHOLD = 0.75;
 
 async function handleFreeText(phone, text, session) {
-  // Texto muy corto → mostrar menú de categorías directamente
-  if (!text || text.length < 10) return showFallbackMenu(phone);
+  // Texto demasiado corto → menú directo (regla: > 8 caracteres)
+  if (!text || text.length <= 8) return showFallbackMenu(phone);
 
+  let result;
   try {
-    const response = await askAI(text, session.historial);
-
-    if (response === 'TRANSFER') {
-      const attempts = (session.ai_fallback_count ?? 0) + 1;
-      updateSession(phone, { ai_fallback_count: attempts, estado: 'menu' });
-
-      if (attempts >= 2) {
-        // Segundo intento fallido → ofrecer asesor (NO transferir automáticamente)
-        updateSession(phone, { ai_fallback_count: 0 });
-        await sendButtons(
-          phone,
-          `Parece que no encuentro la respuesta que necesitas 😔\n¿Querés hablar con un asesor del equipo académico?`,
-          [
-            { id: 'hablar_asesor', title: '💬 Hablar con asesor' },
-            { id: 'volver_menu',   title: '📋 Ver menú' },
-          ]
-        );
-        return;
-      }
-
-      return showFallbackMenu(phone);
-    }
-
-    // IA respondió con éxito
-    updateSession(phone, { ai_fallback_count: 0, estado: 'menu' });
-    addToHistory(phone, 'bot', response);
-    await sendText(phone, response);
-    await sendButtons(
-      phone,
-      '¿Hay algo más en lo que pueda ayudarte?',
-      [
-        { id: 'volver_menu',   title: '📋 Ver menú' },
-        { id: 'hablar_asesor', title: '💬 Hablar con asesor' },
-      ]
-    );
+    result = await detectIntent(text, { estado: session.estado });
   } catch (err) {
-    console.error('[bot] Error en IA:', err);
-    return showFallbackMenu(phone); // Error → fallback al menú, NO transfer automático
+    console.error('[bot] Error en detección de intención:', err.message);
+    return showFallbackMenu(phone);
   }
+
+  const { intent, confidence, is_complaint } = result;
+  console.log(`[ai] intent=${intent} confidence=${confidence.toFixed(2)} complaint=${is_complaint}`);
+
+  // Confianza insuficiente o intención desconocida → menú
+  if (confidence < INTENT_CONFIDENCE_THRESHOLD || intent === 'DESCONOCIDO') {
+    return showFallbackMenu(phone);
+  }
+
+  // ── Caso especial: queja + certificación ──────────────────────────────────
+  if (is_complaint && intent === 'certificacion') {
+    if (session.verified && session.studentId) {
+      // Rama B: mostrar lista de programas directamente
+      return showCertificados(phone, session);
+    }
+    // Sin verificación: flujo de reclamo
+    return askReclamoDatos(
+      phone,
+      'reclamo_certificado',
+      `Lamentamos el inconveniente 😔 Vamos a revisar tu caso de inmediato.\nUn asesor te atenderá en breve 💙`
+    );
+  }
+
+  // ── Enrutar como si el alumno hubiera seleccionado la opción del menú ─────
+  updateSession(phone, { ultimoTema: intent });
+  return handleMenuOption(phone, intent, session);
+}
+
+// ── CSAT ─────────────────────────────────────────────────────────────────────
+
+async function handleCsatReply(phone, rating, session) {
+  try {
+    await createCsat(
+      session.conversationId,
+      session.studentId || null,
+      phone,
+      session.lastTicketNumber || null,
+      rating
+    );
+    console.log(`[csat] Guardado: phone=${phone} rating=${rating} ticket=${session.lastTicketNumber || 'N/A'}`);
+  } catch (err) {
+    console.error('[csat] Error guardando calificación:', err.message);
+  }
+
+  await sendText(
+    phone,
+    `¡Gracias por tu calificación! 🙏\n` +
+    `Que tengas un excelente día 💙\n` +
+    `*W|E Educación Ejecutiva*`
+  );
+
+  // Resolver conversación en Chatwoot si aún está abierta (puede haber sido reabierta)
+  if (session.conversationId) {
+    const { resolveConversation } = require('./services/chatwoot');
+    resolveConversation(session.conversationId).catch(() => {});
+  }
+
+  deleteSession(phone);
 }
 
 // ── Nivel 3: fallback al menú de categorías ───────────────────────────────────

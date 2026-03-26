@@ -6,6 +6,11 @@ const { showMenu }                            = require('./menu');
 const { runTransfer }                         = require('./transfer');
 const { isWithinBusinessHours, getScheduleText } = require('../services/schedule');
 
+/** Quita todo lo que no sea dígito para comparar números de teléfono */
+function normalizePhone(p) {
+  return String(p || '').replace(/\D/g, '');
+}
+
 async function startIdentificacion(phone) {
   const dentroHorario = isWithinBusinessHours();
 
@@ -35,10 +40,24 @@ async function handleCorreo(phone, email, session) {
   }
 
   if (alumno) {
+    // ── Verificación de número (transparente — sin mensaje al alumno) ────────
+    const sessionPhone = normalizePhone(phone);
+    const dbPhone      = normalizePhone(alumno.phone);
+    // Aceptar si uno es sufijo del otro (maneja diferencias de código de país)
+    const verified =
+      sessionPhone.length > 0 && dbPhone.length > 0 &&
+      (sessionPhone === dbPhone ||
+       sessionPhone.endsWith(dbPhone) ||
+       dbPhone.endsWith(sessionPhone));
+
+    console.log(`[identificacion] phone verificado: ${verified} (sesión=${sessionPhone}, db=${dbPhone})`);
+
     updateSession(phone, {
-      nombre: alumno.full_name,
-      correo: alumno.email,
-      estado: 'menu',
+      nombre:    alumno.full_name,
+      correo:    alumno.email,
+      studentId: alumno.id,
+      verified,
+      estado:    'menu',
     });
     tagAlumno(phone, alumno.full_name, alumno.email);
     await sendText(phone, `✅ ¡Hola, ${alumno.full_name}! Te encontramos en el sistema 😊`);

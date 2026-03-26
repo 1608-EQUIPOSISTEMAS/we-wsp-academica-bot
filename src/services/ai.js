@@ -1,48 +1,65 @@
 const OpenAI = require('openai');
-const fs     = require('fs');
-const path   = require('path');
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-let knowledgeBase = '';
-try {
-  knowledgeBase = fs.readFileSync(
-    path.join(__dirname, '../data/knowledge_base.txt'),
-    'utf-8'
-  );
-} catch {
-  console.warn('[ai] knowledge_base.txt no encontrado, RAG deshabilitado');
+// ── Intent Detection ──────────────────────────────────────────────────────────
+
+const INTENT_SYSTEM_PROMPT = `Eres un clasificador de intenciones para el bot académico de W|E Educación Ejecutiva.
+Analiza el mensaje del alumno y responde ÚNICAMENTE con el JSON:
+{
+  "intent": "[ID]",
+  "confidence": 0.0,
+  "is_complaint": false
 }
 
-const SYSTEM_PROMPT = `Eres un asistente académico amable de W|E Educación Ejecutiva.
-Responde SOLO sobre temas académicos de W|E en español.
-Sé breve, claro y usa emojis con moderación.
-Si no tienes suficiente información para responder con certeza, responde exactamente: TRANSFER
-Base de conocimiento:
-${knowledgeBase}`;
+IDs disponibles:
+- campus_virtual: problemas para ingresar al campus o plataforma
+- certificacion: consultas o reclamos sobre certificados
+- justificaciones: justificar inasistencia o tardanza
+- alumno_flex: solicitar modalidad flex
+- instaladores: problemas con SAP, Office o software
+- grupo_whatsapp: solicitar link del grupo de WhatsApp
+- examenes_int: exámenes internacionales MOS, PMI u otros
+- cronograma: fechas, horarios o calendario del programa
+- inscripcion: inscribirse a un nuevo programa o curso
+- funciones_docente: herramientas o funciones del docente
+- hablar_asesor: quiere hablar con una persona humana
+- DESCONOCIDO: no se puede clasificar con certeza
 
-async function askAI(userMessage, historial = []) {
-  const messages = [
-    { role: 'system', content: SYSTEM_PROMPT },
-    ...historial.map(m => ({
-      role:    m.role === 'bot' ? 'assistant' : 'user',
-      content: m.content,
-    })),
-  ];
+is_complaint debe ser true si el alumno expresa frustración, queja, urgencia o menciona que lleva tiempo esperando.
 
-  // Agregar el mensaje actual si no viene ya en el historial
-  const lastInHistory = messages[messages.length - 1];
-  if (!lastInHistory || lastInHistory.content !== userMessage) {
-    messages.push({ role: 'user', content: userMessage });
-  }
+Responde SOLO el JSON, sin explicaciones adicionales.`;
 
+/**
+ * Detecta la intención del mensaje del alumno.
+ * @param {string} text          — Mensaje libre del alumno
+ * @param {Object} [sessionState] — Estado de sesión (para contexto, opcional)
+ * @returns {{ intent: string, confidence: number, is_complaint: boolean }}
+ */
+async function detectIntent(text, sessionState = {}) {
   const response = await client.chat.completions.create({
-    model:      'gpt-4o-mini',
-    max_tokens: 512,
-    messages,
+    model:           'gpt-4o-mini',
+    max_tokens:      80,
+    temperature:     0,
+    response_format: { type: 'json_object' },
+    messages: [
+      { role: 'system', content: INTENT_SYSTEM_PROMPT },
+      { role: 'user',   content: text },
+    ],
   });
 
-  return response.choices[0].message.content.trim();
+  let parsed;
+  try {
+    parsed = JSON.parse(response.choices[0].message.content.trim());
+  } catch {
+    return { intent: 'DESCONOCIDO', confidence: 0, is_complaint: false };
+  }
+
+  return {
+    intent:       String(parsed.intent      || 'DESCONOCIDO'),
+    confidence:   typeof parsed.confidence === 'number' ? parsed.confidence : 0,
+    is_complaint: parsed.is_complaint === true,
+  };
 }
 
-module.exports = { askAI };
+module.exports = { detectIntent };

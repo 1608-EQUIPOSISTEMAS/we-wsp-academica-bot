@@ -30,6 +30,24 @@ function createSession(phone) {
     resuelto_bot_at:     null,   // timestamp cuando se preguntó "¿Algo más?"
     estado_inactividad:  null,   // null | 'advertido' | 'resuelto'
     ultimaInteraccion:   Date.now(),
+    // ── Identificación y verificación ──────────────────────────────────────
+    verified:            false,  // true si phone de sesión coincide con phone en DB
+    studentId:           null,   // id en ods_student_bot (si fue encontrado)
+    // ── Selección de programas en flujos B ──────────────────────────────────
+    programOptions:      null,   // array COMPLETO de programas del alumno
+    programPage:         0,      // página actual de la lista paginada (0-based)
+    pendingFlexProgram:  null,   // programa seleccionado para solicitud flex
+    // ── Transfer / atención humana ───────────────────────────────────────────
+    transfer_at:              null,   // timestamp cuando se hizo transfer
+    transfer_wait_msg_sent:   false,  // true cuando se envió msg "lamentamos la espera"
+    asesor_respondio:         false,  // true cuando el asesor envió su primer mensaje
+    asesor_respondio_at:      null,
+    asesor_inactivity_msg_sent: false, // true cuando se envió msg "¿sigues ahí?"
+    resolved_by:              null,   // null | 'inactivity'
+    // ── CSAT ────────────────────────────────────────────────────────────────
+    csat_sent:        false,
+    csat_sent_at:     null,
+    lastTicketNumber: null,   // último ticket generado en esta sesión
   };
   sessions.set(phone, session);
   return session;
@@ -80,11 +98,28 @@ function getAllSessions() {
   return sessions;
 }
 
+/**
+ * Busca la sesión activa que tenga conversationId === convId y la actualiza.
+ * Útil para eventos de webhook donde sólo tenemos el ID de conversación.
+ */
+function updateSessionByConvId(convId, data) {
+  if (!convId) return;
+  for (const [phone, session] of sessions.entries()) {
+    if (session.conversationId === convId || session.conversationId === String(convId)) {
+      Object.assign(session, data);
+      sessions.set(phone, session);
+      return session;
+    }
+  }
+  return null;
+}
+
 module.exports = {
   getSession,
   createSession,
   getOrCreateSession,
   updateSession,
+  updateSessionByConvId,
   deleteSession,
   addToHistory,
   getAllSessions,

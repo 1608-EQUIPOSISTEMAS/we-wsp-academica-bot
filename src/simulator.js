@@ -15,6 +15,13 @@
  *   • Número  (ej: 1, 2)       → selecciona esa opción
  *   • ID directo (ej: campus_virtual)
  *   • Texto libre              → activa la IA/RAG
+ *
+ * Comandos especiales:
+ *   /reset          → reinicia la sesión
+ *   /sesion         → muestra estado actual de la sesión
+ *   /verificado     → simula alumno VERIFICADO (Juan Pérez — phone coincide con DB)
+ *   /noverificado   → simula alumno NO VERIFICADO (Ana Martínez — phone diferente)
+ *   /salir          → cierra el simulador
  */
 
 require('dotenv').config();
@@ -32,7 +39,9 @@ const c = {
   yellow:  '\x1b[33m',
   magenta: '\x1b[35m',
   blue:    '\x1b[34m',
+  red:     '\x1b[31m',
   bgBlue:  '\x1b[44m',
+  bgGreen: '\x1b[42m',
 };
 
 function tag(color, label, text) {
@@ -98,7 +107,6 @@ function renderPrivateNote(content) {
 }
 
 // ── Mock de whatsapp.js ───────────────────────────────────────────────────────
-// Intercepta el nivel más alto para que ni Meta API ni Chatwoot se llamen.
 const whatsappMock = {
   sendText: async (_phone, body) => {
     clearPending();
@@ -116,13 +124,26 @@ const whatsappMock = {
     clearPending();
     renderList(header, body, footer, sections);
   },
+  sendCtaUrl: async (_phone, bodyText, displayText, url) => {
+    clearPending();
+    renderText(`${bodyText}\n🔗 [${displayText}] → ${url}`);
+  },
 };
 
 // ── Mock de chatwoot.js ───────────────────────────────────────────────────────
-// Intercepta addPrivateNote usado directamente por transfer.js
 const chatwootMock = {
-  postMessage:    async () => {},
-  addPrivateNote: async (_convId, content) => { renderPrivateNote(content); },
+  postMessage:           async () => {},
+  addPrivateNote:        async (_convId, content) => { renderPrivateNote(content); },
+  resolveConversation:   async () => {},
+  openConversation:      async () => {},
+  deactivateBot:         async () => {},
+  setLabels:             async () => {},
+  setCustomAttributes:   async () => {},
+  assignTeam:            async () => {},
+  assignAgent:           async () => {},
+  tagFlow:               () => {},
+  tagAlumno:             () => {},
+  findMembershipByEmail: async () => ({ type: null, isMember: false }),
 };
 
 // ── Inyectar mocks ANTES de cargar bot.js ─────────────────────────────────────
@@ -134,16 +155,40 @@ function injectMock(relativePath, mockExports) {
   };
 }
 
+// ── Mock de ai.js — wrapper del módulo real con salida con estilo ─────────────
+// Cargamos el módulo real primero, luego lo envolvemos para mostrar el intent
+// de forma visual en el simulador (la llamada real a OpenAI sigue ocurriendo).
+const realAi = require('./services/ai');
+injectMock('./services/ai', {
+  detectIntent: async (text, state) => {
+    const result = await realAi.detectIntent(text, state);
+    const confBar  = result.confidence >= 0.75
+      ? `${c.green}●${c.reset}`
+      : `${c.red}●${c.reset}`;
+    const complaintLabel = result.is_complaint
+      ? ` ${c.red}⚠ queja${c.reset}`
+      : '';
+    process.stdout.write(
+      `\n  ${c.magenta}${c.bold}[INTENT]${c.reset} ` +
+      `${c.bold}${result.intent}${c.reset}  ` +
+      `conf: ${confBar} ${result.confidence.toFixed(2)}` +
+      `${complaintLabel}\n`
+    );
+    return result;
+  },
+});
+
 injectMock('./services/whatsapp', whatsappMock);
 injectMock('./services/chatwoot', chatwootMock);
 
 // ── Cargar módulos reales ─────────────────────────────────────────────────────
 const { handleIncoming } = require('./bot');
-const { getSession }     = require('./services/session');
+const { getSession, deleteSession } = require('./services/session');
 
-// ── Constantes del simulador ──────────────────────────────────────────────────
-const PHONE   = '5491100000000';
-const CONV_ID = 'sim-conv-001';
+// ── Estado del simulador ──────────────────────────────────────────────────────
+// PHONE por defecto: número genérico (sin verificación)
+let PHONE    = '5491100000000';
+let CONV_ID  = 'sim-conv-001';
 let msgCounter = 0;
 
 function fakeId() {
@@ -169,9 +214,14 @@ function showSession() {
   if (!s) { tag(c.yellow, 'SESIÓN', 'sin sesión activa'); return; }
   const parts = [
     `estado=${s.estado}`,
-    s.nombre     ? `nombre=${s.nombre}` : null,
-    s.correo     ? `correo=${s.correo}`  : null,
-    s.ultimoTema ? `tema=${s.ultimoTema}` : null,
+    s.nombre     ? `nombre=${s.nombre}`     : null,
+    s.correo     ? `correo=${s.correo}`      : null,
+    s.ultimoTema ? `tema=${s.ultimoTema}`    : null,
+    s.verified          ? `${c.green}✓ verificado${c.reset}` : `${c.red}✗ no-verificado${c.reset}`,
+    s.studentId         ? `studentId=${s.studentId}` : null,
+    s.asesor_respondio  ? `${c.green}asesor✓${c.reset}` : null,
+    s.csat_sent         ? `${c.cyan}csat-enviado${c.reset}` : null,
+    s.lastTicketNumber  ? `ticket=${s.lastTicketNumber}` : null,
     `historial=${s.historial.length} msgs`,
   ].filter(Boolean);
   tag(c.yellow, 'SESIÓN', parts.join('  '));
@@ -212,6 +262,19 @@ async function processInput(raw) {
   process.stdout.write('\n');
 }
 
+// ── Cambio de modo simulación ─────────────────────────────────────────────────
+async function switchMode(newPhone, label, email) {
+  PHONE   = newPhone;
+  CONV_ID = `sim-conv-${newPhone.slice(-4)}`;
+  deleteSession(PHONE);
+  clearPending();
+  tag(c.bgGreen, 'MODO', label);
+  if (email) {
+    process.stdout.write(`  ${c.dim}Correo de prueba: ${email}${c.reset}\n\n`);
+  }
+  await processInput('hola');
+}
+
 // ── Banner ────────────────────────────────────────────────────────────────────
 function printBanner() {
   const line = '═'.repeat(56);
@@ -228,9 +291,12 @@ function printBanner() {
     `    • El ID directamente  (ej: campus_virtual)\n` +
     `    • Texto libre para activar la IA/RAG\n\n` +
     `  Comandos especiales:\n` +
-    `    /reset   → reinicia la sesión\n` +
-    `    /sesion  → muestra estado actual de la sesión\n` +
-    `    /salir   → cierra el simulador\n${c.reset}\n`
+    `    /reset          → reinicia la sesión\n` +
+    `    /sesion         → muestra estado actual de la sesión\n` +
+    `    /verificado     → alumno VERIFICADO (Juan Pérez — phone coincide con DB)\n` +
+    `    /noverificado   → alumno NO VERIFICADO (Ana Martínez — phone diferente)\n` +
+    `    /resuelto       → simula que el asesor resolvió la conv. (envía CSAT)\n` +
+    `    /salir          → cierra el simulador\n${c.reset}\n`
   );
 }
 
@@ -264,16 +330,68 @@ async function main() {
       process.stdout.write('\n👋 Simulador cerrado.\n');
       process.exit(0);
     }
+
     if (input === '/reset') {
-      const { deleteSession } = require('./services/session');
       deleteSession(PHONE);
       clearPending();
-      tag(c.yellow, 'SESIÓN', 'Sesión eliminada — el próximo mensaje iniciará de cero');
+      tag(c.yellow, 'SESIÓN', `Sesión eliminada para ${PHONE} — el próximo mensaje iniciará de cero`);
       process.stdout.write('\n');
       rl.prompt();
       return;
     }
+
     if (input === '/sesion') {
+      showSession();
+      process.stdout.write('\n');
+      rl.prompt();
+      return;
+    }
+
+    // ── Caso de prueba: alumno VERIFICADO ───────────────────────────────────
+    // Phone 51922495159 coincide con juan.perez@gmail.com en la DB de prueba
+    if (input === '/verificado') {
+      await switchMode(
+        '51922495159',
+        'Simulando alumno VERIFICADO → juan.perez@gmail.com (phone = 51922495159)',
+        'juan.perez@gmail.com'
+      );
+      rl.prompt();
+      return;
+    }
+
+    // ── Caso de prueba: alumno NO VERIFICADO ─────────────────────────────────
+    // Phone 51900099999 NO coincide con ana.martinez@outlook.com (51944444444)
+    if (input === '/noverificado') {
+      await switchMode(
+        '51900099999',
+        'Simulando alumno NO VERIFICADO → ana.martinez@outlook.com (phone distinto)',
+        'ana.martinez@outlook.com'
+      );
+      rl.prompt();
+      return;
+    }
+
+    // ── Simular conversación resuelta por asesor (dispara CSAT) ─────────────
+    if (input === '/resuelto') {
+      const { handleIncoming: _hi } = require('./bot');
+      const { updateSession: _us } = require('./services/session');
+      // Simular que el agente resolvió → el bot envía CSAT
+      tag(c.bgGreen, 'MODO', 'Simulando conversación resuelta por asesor → CSAT');
+      const { sendButtons: _sb } = require('./services/whatsapp');
+      const sess = require('./services/session').getSession(PHONE) || {};
+      // Enviar los dos mensajes de CSAT directamente
+      await require('./services/whatsapp').sendButtons(
+        PHONE,
+        `¿Cómo calificarías tu atención hoy? 😊\nPor favor selecciona una opción:`,
+        [{ id: 'csat_1', title: '⭐ 1' }, { id: 'csat_2', title: '⭐⭐ 2' }, { id: 'csat_3', title: '⭐⭐⭐ 3' }]
+      );
+      await require('./services/whatsapp').sendButtons(
+        PHONE,
+        `O si tu experiencia fue excelente:`,
+        [{ id: 'csat_4', title: '⭐⭐⭐⭐ 4' }, { id: 'csat_5', title: '⭐⭐⭐⭐⭐ 5' }]
+      );
+      _us(PHONE, { estado: 'esperando_csat', csat_sent: true, csat_sent_at: Date.now() });
+      process.stdout.write('\n');
       showSession();
       process.stdout.write('\n');
       rl.prompt();
