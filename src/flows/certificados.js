@@ -39,7 +39,8 @@ async function showCertificados(phone, session) {
   updateSession(phone, { estado: 'flow_cert_modalidad', ultimoTema: 'certificacion' });
   tagFlow(phone, ['bot-activo', 'certificados'], 'Certificación');
 
-  if (session.verified && session.studentId) {
+  const verifiedFlowEnabled = process.env.ENABLE_VERIFIED_FLOW !== 'false';
+  if (verifiedFlowEnabled && session.verified && session.studentId) {
     return _showCertProgramList(phone, session);
   }
   return _showCertRamaA(phone);

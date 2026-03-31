@@ -46,11 +46,14 @@ async function postMessage(conversationId, payload) {
 }
 
 async function addPrivateNote(conversationId, content) {
-  return postMessage(conversationId, {
+  console.log(`[chatwoot] addPrivateNote conv=${conversationId} content="${content.slice(0, 80)}..."`);
+  const result = await postMessage(conversationId, {
     content,
     message_type: 'outgoing',
     private:      true,
   });
+  console.log(`[chatwoot] addPrivateNote OK conv=${conversationId} msgId=${result?.id}`);
+  return result;
 }
 
 // ── Cambiar estado de conversación ───────────────────────────────────────────
@@ -156,6 +159,63 @@ async function assignAgent(conversationId, agentId) {
   }
 }
 
+// ── Consultar mensajes de una conversación ─────────────────────────────────
+
+/**
+ * Obtiene los mensajes de una conversación vía API de Chatwoot.
+ * Retorna el array de mensajes (más recientes primero).
+ */
+async function getConversationMessages(conversationId) {
+  try {
+    const { data } = await axios.get(
+      apiUrl(`/accounts/${ACCOUNT_ID}/conversations/${conversationId}/messages`),
+      { headers: getHeaders() }
+    );
+    return data.payload || [];
+  } catch (err) {
+    console.error('[chatwoot] Error getConversationMessages:', err.response?.data || err.message);
+    return [];
+  }
+}
+
+/**
+ * Verifica si un agente humano (no el bot) ha enviado mensajes en la conversación.
+ *
+ * @param {number|string} conversationId
+ * @param {number}        [sinceMs=0]  Solo considerar mensajes después de este timestamp (ms)
+ * @returns {{ responded: boolean, respondedAt: number|null }}
+ *
+ * En la API de Chatwoot:
+ *   message_type: 0=incoming, 1=outgoing, 2=activity
+ *   sender.type: 'user' (agente humano en API), 'agent_bot' (bot), 'contact' (contacto)
+ *
+ * IMPORTANTE: El bot envía mensajes con las credenciales del agente "Marketing"
+ * (CHATWOOT_DEFAULT_AGENT_ID), por lo que sus mensajes tienen sender.type='user'.
+ * Filtramos por sender.id para excluir los mensajes del bot.
+ */
+/**
+ * Verifica si un agente humano ha enviado mensajes en la conversación.
+ *
+ * Con la arquitectura PENDING→OPEN, todos los mensajes del bot se envían
+ * mientras la conv está en PENDING. Después del openConversation() en el
+ * transfer, cualquier mensaje outgoing con ts > sinceMs es del asesor humano.
+ * Ya no es necesario filtrar por botAgentId.
+ */
+async function checkAgentReplied(conversationId, sinceMs = 0) {
+  const messages = await getConversationMessages(conversationId);
+
+  for (const msg of messages) {
+    if (msg.message_type === 1 && !msg.private) {
+      const ts = msg.created_at ? msg.created_at * 1000 : Date.now();
+      if (sinceMs && ts < sinceMs) continue;
+      console.log(`[chatwoot] checkAgentReplied: encontrado msg de agente "${msg.sender?.name}" (id=${msg.sender?.id}) ts=${new Date(ts).toISOString()} en conv=${conversationId}`);
+      return { responded: true, respondedAt: ts };
+    }
+  }
+  console.log(`[chatwoot] checkAgentReplied: ningún msg de agente en conv=${conversationId} (since=${sinceMs ? new Date(sinceMs).toISOString() : 'inicio'})`);
+  return { responded: false, respondedAt: null };
+}
+
 // ── Helpers fire-and-forget ───────────────────────────────────────────────────
 
 /**
@@ -192,6 +252,8 @@ module.exports = {
   setCustomAttributes,
   assignTeam,
   assignAgent,
+  getConversationMessages,
+  checkAgentReplied,
   tagFlow,
   tagAlumno,
 };

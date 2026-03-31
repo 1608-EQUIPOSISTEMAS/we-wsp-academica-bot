@@ -5,7 +5,7 @@ const { handleIncoming }                                         = require('./bo
 const { postMessage }                                            = require('./services/chatwoot');
 const { getSession, deleteSession, updateSession,
         updateSessionByConvId }                                  = require('./services/session');
-const { sendText, sendButtons }                                  = require('./services/whatsapp');
+const { sendText, sendList }                                     = require('./services/whatsapp');
 const { startInactivityWatcher }                                 = require('./services/inactivity');
 
 const app  = express();
@@ -46,24 +46,22 @@ async function sendSimpleGoodbye(phone) {
 
 async function sendCsatSurvey(phone, session) {
   try {
-    // Mensaje 1: opciones 1-3
-    await sendButtons(
+    await sendList(
       phone,
-      `¿Cómo calificarías tu atención hoy? 😊\nPor favor selecciona una opción:`,
-      [
-        { id: 'csat_1', title: '⭐ 1' },
-        { id: 'csat_2', title: '⭐⭐ 2' },
-        { id: 'csat_3', title: '⭐⭐⭐ 3' },
-      ]
-    );
-    // Mensaje 2: opciones 4-5
-    await sendButtons(
-      phone,
-      `O si tu experiencia fue excelente:`,
-      [
-        { id: 'csat_4', title: '⭐⭐⭐⭐ 4' },
-        { id: 'csat_5', title: '⭐⭐⭐⭐⭐ 5' },
-      ]
+      'Encuesta de satisfacción',
+      '¿Cómo calificarías tu atención hoy? 😊\nPor favor selecciona una opción:',
+      'W|E Educación Ejecutiva',
+      'Ver opciones',
+      [{
+        title: 'Calificación',
+        rows: [
+          { id: 'csat_1', title: '⭐ 1',         description: 'Muy malo' },
+          { id: 'csat_2', title: '⭐⭐ 2',       description: 'Malo' },
+          { id: 'csat_3', title: '⭐⭐⭐ 3',     description: 'Regular' },
+          { id: 'csat_4', title: '⭐⭐⭐⭐ 4',   description: 'Bueno' },
+          { id: 'csat_5', title: '⭐⭐⭐⭐⭐ 5', description: 'Excelente' },
+        ],
+      }]
     );
 
     updateSession(phone, {
@@ -100,12 +98,20 @@ app.post('/webhook/chatwoot', (req, res) => {
         payload.sender?.type === 'agent'
       ) {
         const convId = payload.conversation?.id;
+        console.log(`[webhook] Agente escribió:`, {
+          convId,
+          convIdType:   typeof convId,
+          senderType:   payload.sender?.type,
+          senderName:   payload.sender?.name,
+          messageType:  payload.message_type,
+          private:      payload.private,
+        });
         if (convId) {
-          updateSessionByConvId(convId, {
+          const updated = updateSessionByConvId(convId, {
             asesor_respondio:    true,
             asesor_respondio_at: Date.now(),
           });
-          console.log(`[webhook] Asesor respondió en conv=${convId}`);
+          console.log(`[webhook] Asesor respondió en conv=${convId} | sesión actualizada: ${updated ? 'SÍ' : 'NO'}`);
         }
         return;
       }
@@ -211,6 +217,9 @@ app.post('/webhook/chatwoot', (req, res) => {
     }
 
     // ── Agente asignado a la conversación ────────────────────────────────────
+    // NOTA: conversation_updated se dispara al asignar agente (incluso por el bot).
+    // NO usarlo para detectar asesor_respondio — eso se verifica vía polling API
+    // en el monitor de inactividad (checkAgentReplied).
     if (event === 'conversation_updated') {
       const rawPhone = payload.contact?.phone_number
                     || payload.meta?.sender?.phone_number;

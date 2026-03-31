@@ -42,7 +42,11 @@ function createSession(phone) {
     transfer_wait_msg_sent:   false,  // true cuando se envió msg "lamentamos la espera"
     asesor_respondio:         false,  // true cuando el asesor envió su primer mensaje
     asesor_respondio_at:      null,
+    alumno_respondio_post_asesor: false, // true cuando el alumno escribió después del asesor
     asesor_inactivity_msg_sent: false, // true cuando se envió msg "¿sigues ahí?"
+    asesor_no_responde_msg_sent:       false, // true cuando se envió nota privada al asesor
+    asesor_no_responde_alumno_msg_sent: false, // true cuando se envió msg de espera al alumno
+    fuera_de_horario:         false,  // true cuando el transfer ocurrió fuera de horario
     resolved_by:              null,   // null | 'inactivity'
     // ── CSAT ────────────────────────────────────────────────────────────────
     csat_sent:        false,
@@ -103,14 +107,21 @@ function getAllSessions() {
  * Útil para eventos de webhook donde sólo tenemos el ID de conversación.
  */
 function updateSessionByConvId(convId, data) {
-  if (!convId) return;
+  if (!convId) return null;
+  const target = String(convId);
+  console.log(`[session] updateSessionByConvId buscando convId=${target} (type=${typeof convId}) en ${sessions.size} sesiones`);
   for (const [phone, session] of sessions.entries()) {
-    if (session.conversationId === convId || session.conversationId === String(convId)) {
+    const stored = String(session.conversationId);
+    if (stored === target) {
+      console.log(`[session] ✓ Encontrada sesión para convId=${target} → phone=${phone}`);
       Object.assign(session, data);
       sessions.set(phone, session);
       return session;
     }
   }
+  console.log(`[session] ✗ No se encontró sesión para convId=${target}. Sesiones activas:`,
+    [...sessions.entries()].map(([p, s]) => `${p}→conv=${s.conversationId}(${typeof s.conversationId})`).join(', ') || 'ninguna'
+  );
   return null;
 }
 

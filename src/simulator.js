@@ -21,6 +21,10 @@
  *   /sesion         → muestra estado actual de la sesión
  *   /verificado     → simula alumno VERIFICADO (Juan Pérez — phone coincide con DB)
  *   /noverificado   → simula alumno NO VERIFICADO (Ana Martínez — phone diferente)
+ *   /resuelto       → simula que el asesor resolvió la conv. (envía CSAT)
+ *   /asesor [msg]   → simula respuesta del asesor humano en Chatwoot
+ *   /tick           → ejecuta un ciclo del monitor de inactividad manualmente
+ *   /fastforward N  → retrocede timestamps N minutos (simula paso del tiempo)
  *   /salir          → cierra el simulador
  */
 
@@ -130,20 +134,42 @@ const whatsappMock = {
   },
 };
 
+// ── Estado de mensajes simulados del asesor ─────────────────────────────────
+const asesorMessages = [];   // { content, created_at (seconds), sender: { id, type, name } }
+
+function addAsesorMessage(content) {
+  asesorMessages.push({
+    message_type: 1,
+    private:      false,
+    content,
+    created_at:   Math.floor(Date.now() / 1000),
+    sender:       { id: 99999, type: 'user', name: 'Asesor Simulado' },
+  });
+}
+
 // ── Mock de chatwoot.js ───────────────────────────────────────────────────────
 const chatwootMock = {
   postMessage:           async () => {},
   addPrivateNote:        async (_convId, content) => { renderPrivateNote(content); },
-  resolveConversation:   async () => {},
+  resolveConversation:   async () => { tag(c.magenta, 'CHATWOOT', 'Conversación resuelta'); },
   openConversation:      async () => {},
   deactivateBot:         async () => {},
-  setLabels:             async () => {},
+  setLabels:             async (_convId, labels) => { tag(c.dim, 'LABELS', labels.join(', ')); },
   setCustomAttributes:   async () => {},
   assignTeam:            async () => {},
   assignAgent:           async () => {},
   tagFlow:               () => {},
   tagAlumno:             () => {},
   findMembershipByEmail: async () => ({ type: null, isMember: false }),
+  getConversationMessages: async () => asesorMessages,
+  checkAgentReplied:     async (_convId, sinceMs = 0) => {
+    for (const msg of asesorMessages) {
+      const ts = msg.created_at * 1000;
+      if (sinceMs && ts < sinceMs) continue;
+      return { responded: true, respondedAt: ts };
+    }
+    return { responded: false, respondedAt: null };
+  },
 };
 
 // ── Inyectar mocks ANTES de cargar bot.js ─────────────────────────────────────
@@ -183,7 +209,8 @@ injectMock('./services/chatwoot', chatwootMock);
 
 // ── Cargar módulos reales ─────────────────────────────────────────────────────
 const { handleIncoming } = require('./bot');
-const { getSession, deleteSession } = require('./services/session');
+const { getSession, deleteSession, updateSession } = require('./services/session');
+const { runInactivityCycle } = require('./services/inactivity');
 
 // ── Estado del simulador ──────────────────────────────────────────────────────
 // PHONE por defecto: número genérico (sin verificación)
@@ -225,6 +252,23 @@ function showSession() {
     `historial=${s.historial.length} msgs`,
   ].filter(Boolean);
   tag(c.yellow, 'SESIÓN', parts.join('  '));
+  // Mostrar detalles de inactividad si estamos en atención humana
+  if (s.en_atencion_humana) {
+    const now = Date.now();
+    const inactParts = [
+      s.transfer_at           ? `transfer: hace ${Math.floor((now - s.transfer_at) / 60000)}m` : null,
+      s.asesor_respondio_at   ? `asesor: hace ${Math.floor((now - s.asesor_respondio_at) / 60000)}m` : null,
+      s.ultimaActividad       ? `actividad: hace ${Math.floor((now - s.ultimaActividad) / 60000)}m` : null,
+      s.transfer_wait_msg_sent ? `${c.yellow}CASO2-enviado${c.reset}` : null,
+      s.asesor_inactivity_msg_sent ? `${c.yellow}CASO3-enviado${c.reset}` : null,
+      s.alumno_respondio_post_asesor ? `${c.green}alumno-respondio${c.reset}` : null,
+      s.asesor_no_responde_msg_sent ? `${c.yellow}CASO3B-1-enviado${c.reset}` : null,
+      s.asesor_no_responde_alumno_msg_sent ? `${c.yellow}CASO3B-2-enviado${c.reset}` : null,
+    ].filter(Boolean);
+    if (inactParts.length) {
+      process.stdout.write(`  ${c.dim}Inactividad: ${inactParts.join(' | ')}${c.reset}\n`);
+    }
+  }
 }
 
 // ── Procesar entrada ──────────────────────────────────────────────────────────
@@ -296,6 +340,9 @@ function printBanner() {
     `    /verificado     → alumno VERIFICADO (Juan Pérez — phone coincide con DB)\n` +
     `    /noverificado   → alumno NO VERIFICADO (Ana Martínez — phone diferente)\n` +
     `    /resuelto       → simula que el asesor resolvió la conv. (envía CSAT)\n` +
+    `    /asesor [msg]   → simula respuesta del asesor humano\n` +
+    `    /tick           → ejecuta un ciclo del monitor de inactividad\n` +
+    `    /fastforward N  → avanza el tiempo N minutos (retrocede timestamps)\n` +
     `    /salir          → cierra el simulador\n${c.reset}\n`
   );
 }
@@ -371,26 +418,84 @@ async function main() {
       return;
     }
 
+    // ── /asesor [msg] — simular respuesta del asesor humano ─────────────────
+    if (input.startsWith('/asesor')) {
+      const msg = input.replace('/asesor', '').trim() || 'Hola, soy el asesor. ¿En qué te puedo ayudar?';
+      addAsesorMessage(msg);
+      tag(c.bgGreen, 'ASESOR', `"${msg}" (ts=${new Date().toISOString()})`);
+      process.stdout.write(`  ${c.dim}(El próximo /tick detectará esta respuesta vía polling)${c.reset}\n\n`);
+      rl.prompt();
+      return;
+    }
+
+    // ── /tick — ejecutar un ciclo del monitor de inactividad ──────────────
+    if (input === '/tick') {
+      tag(c.yellow, 'TICK', 'Ejecutando ciclo de inactividad...');
+      process.stdout.write('\n');
+      await runInactivityCycle();
+      process.stdout.write('\n');
+      showSession();
+      process.stdout.write('\n');
+      rl.prompt();
+      return;
+    }
+
+    // ── /fastforward N — retroceder timestamps N minutos ──────────────────
+    if (input.startsWith('/fastforward')) {
+      const minutes = parseInt(input.replace('/fastforward', '').trim(), 10);
+      if (isNaN(minutes) || minutes <= 0) {
+        tag(c.red, 'ERROR', 'Uso: /fastforward N  (donde N = minutos a avanzar)');
+        rl.prompt();
+        return;
+      }
+      const shiftMs = minutes * 60 * 1000;
+      const sess = getSession(PHONE);
+      if (!sess) {
+        tag(c.red, 'ERROR', 'No hay sesión activa');
+        rl.prompt();
+        return;
+      }
+      const fields = [
+        'ultimaActividad', 'ultimaInteraccion', 'transfer_at',
+        'resuelto_bot_at', 'asesor_respondio_at', 'csat_sent_at',
+      ];
+      const shifted = {};
+      for (const f of fields) {
+        if (sess[f]) shifted[f] = sess[f] - shiftMs;
+      }
+      updateSession(PHONE, shifted);
+      // Also shift asesor mock messages
+      for (const msg of asesorMessages) {
+        msg.created_at = msg.created_at - (minutes * 60);
+      }
+      tag(c.yellow, 'FASTFORWARD', `Timestamps retrocedidos ${minutes} min`);
+      showSession();
+      process.stdout.write('\n');
+      rl.prompt();
+      return;
+    }
+
     // ── Simular conversación resuelta por asesor (dispara CSAT) ─────────────
     if (input === '/resuelto') {
-      const { handleIncoming: _hi } = require('./bot');
-      const { updateSession: _us } = require('./services/session');
-      // Simular que el agente resolvió → el bot envía CSAT
       tag(c.bgGreen, 'MODO', 'Simulando conversación resuelta por asesor → CSAT');
-      const { sendButtons: _sb } = require('./services/whatsapp');
-      const sess = require('./services/session').getSession(PHONE) || {};
-      // Enviar los dos mensajes de CSAT directamente
-      await require('./services/whatsapp').sendButtons(
+      await require('./services/whatsapp').sendList(
         PHONE,
-        `¿Cómo calificarías tu atención hoy? 😊\nPor favor selecciona una opción:`,
-        [{ id: 'csat_1', title: '⭐ 1' }, { id: 'csat_2', title: '⭐⭐ 2' }, { id: 'csat_3', title: '⭐⭐⭐ 3' }]
+        'Encuesta de satisfacción',
+        '¿Cómo calificarías tu atención hoy? 😊\nPor favor selecciona una opción:',
+        'W|E Educación Ejecutiva',
+        'Ver opciones',
+        [{
+          title: 'Calificación',
+          rows: [
+            { id: 'csat_1', title: '⭐ 1',         description: 'Muy malo' },
+            { id: 'csat_2', title: '⭐⭐ 2',       description: 'Malo' },
+            { id: 'csat_3', title: '⭐⭐⭐ 3',     description: 'Regular' },
+            { id: 'csat_4', title: '⭐⭐⭐⭐ 4',   description: 'Bueno' },
+            { id: 'csat_5', title: '⭐⭐⭐⭐⭐ 5', description: 'Excelente' },
+          ],
+        }]
       );
-      await require('./services/whatsapp').sendButtons(
-        PHONE,
-        `O si tu experiencia fue excelente:`,
-        [{ id: 'csat_4', title: '⭐⭐⭐⭐ 4' }, { id: 'csat_5', title: '⭐⭐⭐⭐⭐ 5' }]
-      );
-      _us(PHONE, { estado: 'esperando_csat', csat_sent: true, csat_sent_at: Date.now() });
+      updateSession(PHONE, { estado: 'esperando_csat', csat_sent: true, csat_sent_at: Date.now() });
       process.stdout.write('\n');
       showSession();
       process.stdout.write('\n');

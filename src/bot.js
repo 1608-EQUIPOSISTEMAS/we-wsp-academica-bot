@@ -1,6 +1,6 @@
 const { getSession, getOrCreateSession, updateSession, addToHistory, deleteSession } = require('./services/session');
 const { createCsat } = require('./services/database');
-const { assignAgent, openConversation } = require('./services/chatwoot');
+const { assignAgent } = require('./services/chatwoot');
 const { showBotResuelto, handleBotResuelto } = require('./flows/resuelto');
 const { sendText, sendButtons, sendList } = require('./services/whatsapp');
 const { buildProgramRows, PAGE_SIZE }     = require('./utils/programList');
@@ -20,7 +20,7 @@ const { showMateriales, handleMaterialesReply }          = require('./flows/mate
 const { showInstaladores, handleInstaladoresReply }      = require('./flows/instaladores');
 const { askReclamoDatos, handleReclamoDatos }             = require('./flows/reclamo');
 const { showAlumnoFlex, handleAlumnoFlexReply }          = require('./flows/alumno_flex');
-const { showInscripcion }                               = require('./flows/inscripcion');
+const { showInscripcion, handleInscripcionReply }        = require('./flows/inscripcion');
 
 // ── Anti-duplicado ─────────────────────────────────────────────────────────────
 const processedIds  = new Set();
@@ -92,6 +92,9 @@ const TEXT_TO_ID = {
   '🏢 Corporativa':                        'inst_laptop_corp',
   // ── Inscripción ─────────────────────────────────────────────────────────
   '📝 Inscribirme':                        'inscripcion',
+  '✅ Ya me registré':                     'insc_registrado',
+  '❓ Tengo una duda':                     'insc_duda',
+  '🏠 Menú principal':                     'insc_menu',
   // ── Justificaciones ──────────────────────────────────────────────────────
   '✅ Listo, ya llené':                    'just_listo',
   '❌ El link no abre':                    'just_link_falla',
@@ -190,20 +193,8 @@ async function handleIncoming(conversationId, phone, msg) {
   const isNewSession = !getSession(phone);
   const session = updateSession(phone, { conversationId, ultimaActividad: Date.now() });
 
-  // Al inicio de cada conversación nueva: pasar de pending → open + asignar agente
-  // Delay de 2s para que Chatwoot termine de procesar la conversación nueva
-  if (isNewSession && conversationId) {
-    setTimeout(async () => {
-      await openConversation(conversationId).catch(err =>
-        console.error('[bot] Error abriendo conversación:', err)
-      );
-      if (process.env.CHATWOOT_DEFAULT_AGENT_ID) {
-        await assignAgent(conversationId, process.env.CHATWOOT_DEFAULT_AGENT_ID).catch(err =>
-          console.error('[bot] Error asignando agente inicial:', err)
-        );
-      }
-    }, 2000);
-  }
+  // La conversación se queda en PENDING mientras el bot atiende.
+  // Se pasa a OPEN solo al hacer transfer humano (ver transfer.js).
 
   let text     = null;
   let buttonId = null;
@@ -273,6 +264,11 @@ async function route(phone, session, { text, buttonId, listId }) {
     // ── En atención humana — bot silenciado salvo palabras reservadas ─────────
     case 'en_atencion_humana':
     case 'transferido': {  // 'transferido' como alias de compatibilidad
+      // Registrar actividad del alumno (evita cierre por inactividad si está respondiendo al asesor)
+      const atencionUpdates = { ultimaActividad: Date.now() };
+      if (session.asesor_respondio) atencionUpdates.alumno_respondio_post_asesor = true;
+      updateSession(phone, atencionUpdates);
+
       const normalized = normalizeText(text || '');
       if (normalized === 'menu' || normalized === 'bot') {
         await sendText(phone,
@@ -418,6 +414,11 @@ async function route(phone, session, { text, buttonId, listId }) {
         return handleInstaladoresReply(phone, 'inst_r3_clave', session);
       return;
 
+    // ── Inscripción — confirmación post-formulario ──────────────────────
+    case 'flow_inscripcion_confirm':
+      if (id) return handleInscripcionReply(phone, id, session);
+      return;
+
     // ── Menú principal / default ───────────────────────────────────────────
     case 'menu':
     default:
@@ -494,6 +495,7 @@ async function handleMenuOption(phone, optionId, session) {
     case 'volver_menu':
     case 'cert_otra_duda':
     case 'bot_resuelto_menu':
+    case 'insc_menu':
       return showMenu(phone, session.nombre);
 
     case 'bot_resuelto_no':

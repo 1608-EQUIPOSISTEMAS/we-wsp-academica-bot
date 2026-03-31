@@ -1,5 +1,5 @@
 const { sendText }                                                          = require('../services/whatsapp');
-const { addPrivateNote, deactivateBot, setLabels, assignTeam, assignAgent } = require('../services/chatwoot');
+const { addPrivateNote, deactivateBot, setLabels, assignTeam, assignAgent, openConversation } = require('../services/chatwoot');
 const { updateSession }                                                     = require('../services/session');
 const { isWithinBusinessHours, getScheduleText }                            = require('../services/schedule');
 const { createSolicitud }                                                   = require('../services/database');
@@ -150,6 +150,8 @@ async function _transferDentroHorario(phone, session, extraNote, solicitud) {
 
   if (session.conversationId) {
     const convId = session.conversationId;
+    // PENDING → OPEN: la conversación aparece en la cola de asesores
+    await openConversation(convId);
     addPrivateNote(convId, buildNota(session, extraNote)).catch(err =>
       console.error('[transfer] Error al agregar nota privada:', err)
     );
@@ -187,13 +189,14 @@ async function _transferFueraDeHorario(phone, session, extraNote, solicitud) {
       phone,
       `Hola ${nombre} 💙 Nuestro equipo académico atiende en el siguiente horario:\n\n` +
       `${getScheduleText()}\n\n` +
-      `Tu consulta ha quedado registrada y un asesor te contactará al inicio del siguiente horario de atención 😊\n\n` +
-      `Si tu consulta es urgente, también puedes escribirnos al correo:\n📧 pagos@we-educacion.com`
+      `Tu consulta ha quedado registrada y un asesor te contactará al inicio del siguiente horario de atención 😊` 
     );
   }
 
   if (session.conversationId) {
     const convId = session.conversationId;
+    // PENDING → OPEN: la conversación aparece en la cola de asesores
+    await openConversation(convId);
     addPrivateNote(convId, buildNota(session, extraNote, true)).catch(err =>
       console.error('[transfer] Error al agregar nota privada (fuera horario):', err)
     );
@@ -204,6 +207,7 @@ async function _transferFueraDeHorario(phone, session, extraNote, solicitud) {
   updateSession(phone, {
     estado:               'en_atencion_humana',
     en_atencion_humana:   true,
+    fuera_de_horario:     true,
     transfer_replies:     0,
     transfer_at:          Date.now(),
     transfer_wait_msg_sent: false,
