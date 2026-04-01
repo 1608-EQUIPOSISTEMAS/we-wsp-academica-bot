@@ -1,8 +1,9 @@
 const { getSession, getOrCreateSession, updateSession, addToHistory, deleteSession } = require('./services/session');
 const { createCsat } = require('./services/database');
-const { assignAgent, updateLabels, resolveConversation } = require('./services/chatwoot');
+const { assignAgent, updateLabels, resolveConversation,
+        addPrivateNote, openConversation, deactivateBot, assignTeam } = require('./services/chatwoot');
 const { showBotResuelto, handleBotResuelto } = require('./flows/resuelto');
-const { sendText, sendButtons, sendList } = require('./services/whatsapp');
+const { sendText, sendTextDirect, sendButtons, sendList } = require('./services/whatsapp');
 const { buildProgramRows, PAGE_SIZE }     = require('./utils/programList');
 const { detectIntent }            = require('./services/ai');
 const { runTransfer }             = require('./flows/transfer');
@@ -242,8 +243,42 @@ async function handleIncoming(conversationId, phone, msg) {
   try {
     await route(phone, session, { text, buttonId, listId });
   } catch (err) {
-    console.error('[bot] Error en route:', err);
-    await sendText(phone, '⚠️ Ocurrió un error inesperado. Por favor, intenta de nuevo en unos momentos.');
+    console.error('[emergencia] Error crítico procesando mensaje:', err);
+
+    // ── 1. Forzar transferencia en sesión ────────────────────────────────────
+    updateSession(phone, {
+      estado:             'en_atencion_humana',
+      en_atencion_humana: true,
+      transfer_at:        Date.now(),
+    });
+
+    const convId = session?.conversationId || conversationId;
+
+    if (convId) {
+      // ── 2. Nota privada para el asesor ─────────────────────────────────────
+      addPrivateNote(
+        convId,
+        `⚠️ *ERROR CRÍTICO DEL BOT*\nEl flujo falló: ${err.message}\nTransferencia automática de emergencia ejecutada.`
+      ).catch(() => {});
+
+      // ── 3. PENDING → OPEN, equipo General, desactivar bot ──────────────────
+      openConversation(convId).catch(() => {});
+      updateLabels(convId, { add: ['transfer-emergencia', 'transfer-humano'] }).catch(() => {});
+      assignTeam(convId, process.env.CHATWOOT_TEAM_GENERAL).catch(() => {});
+      assignAgent(convId, process.env.CHATWOOT_DEFAULT_AGENT_ID).catch(() => {});
+      deactivateBot(convId).catch(() => {});
+    }
+
+    // ── 4. Aviso al usuario (try/catch propio: la API de WA podría estar caída)
+    try {
+      await sendTextDirect(
+        phone,
+        `Ups, estamos experimentando intermitencias técnicas 🛠️\n` +
+        `Te estoy transfiriendo inmediatamente con un asesor para que te ayude.`
+      );
+    } catch (sendErr) {
+      console.error('[emergencia] No se pudo enviar aviso al usuario:', sendErr.message);
+    }
   }
 }
 
