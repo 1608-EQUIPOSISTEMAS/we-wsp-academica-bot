@@ -1,5 +1,5 @@
 const { sendText }                                                          = require('../services/whatsapp');
-const { addPrivateNote, deactivateBot, setLabels, assignTeam, assignAgent, openConversation } = require('../services/chatwoot');
+const { addPrivateNote, deactivateBot, updateLabels, assignTeam, assignAgent, openConversation } = require('../services/chatwoot');
 const { updateSession }                                                     = require('../services/session');
 const { isWithinBusinessHours, getScheduleText }                            = require('../services/schedule');
 const { createSolicitud }                                                   = require('../services/database');
@@ -7,6 +7,7 @@ const { createSolicitud }                                                   = re
 // ── Mapeo tema → equipo ───────────────────────────────────────────────────────
 const TEAM_ACADEMICO = process.env.CHATWOOT_TEAM_ACADEMICO;
 const TEAM_SOPORTE   = process.env.CHATWOOT_TEAM_SOPORTE;
+const TEAM_GENERAL   = process.env.CHATWOOT_TEAM_GENERAL;
 
 const TOPIC_TEAM = {
   campus_virtual:       TEAM_ACADEMICO,
@@ -83,9 +84,9 @@ function buildDbNotes(session, extraNote) {
 }
 
 function applyLabelsAndAssign(convId, session, labels) {
-  setLabels(convId, labels);
-  const teamId = TOPIC_TEAM[session.ultimoTema];
-  if (teamId) assignTeam(convId, teamId);
+  updateLabels(convId, { add: labels });
+  const teamId = TOPIC_TEAM[session.ultimoTema] || TEAM_GENERAL;
+  assignTeam(convId, teamId);
   assignAgent(convId, process.env.CHATWOOT_DEFAULT_AGENT_ID);
 }
 
