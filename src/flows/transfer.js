@@ -1,4 +1,4 @@
-const { sendText }                                                          = require('../services/whatsapp');
+const { sendTextDirect }                                                    = require('../services/whatsapp');
 const { addPrivateNote, deactivateBot, updateLabels, assignTeam, assignAgent, openConversation } = require('../services/chatwoot');
 const { updateSession }                                                     = require('../services/session');
 const { isWithinBusinessHours, getScheduleText }                            = require('../services/schedule');
@@ -133,7 +133,7 @@ async function _transferDentroHorario(phone, session, extraNote, solicitud) {
   const tipo = getTipo(session.ultimoTema);
 
   if (solicitud && tipo !== 'CONSULTA_GENERAL') {
-    await sendText(
+    await sendTextDirect(
       phone,
       `🎫 *Tu número de ticket: ${solicitud.ticket_number}*\n` +
       `Un asesor te atenderá en breve 💙\n\n` +
@@ -141,7 +141,7 @@ async function _transferDentroHorario(phone, session, extraNote, solicitud) {
       `Por favor, mantente atento a este chat.`
     );
   } else {
-    await sendText(
+    await sendTextDirect(
       phone,
       `Entendido 💙 En breve un asesor del equipo académico te atenderá.\n\n` +
       `⏱️ Tiempo de espera estimado: *15 minutos*\n` +
@@ -178,7 +178,7 @@ async function _transferFueraDeHorario(phone, session, extraNote, solicitud) {
   const tipo   = getTipo(session.ultimoTema);
 
   if (solicitud && tipo !== 'CONSULTA_GENERAL') {
-    await sendText(
+    await sendTextDirect(
       phone,
       `🎫 *Tu número de ticket: ${solicitud.ticket_number}*\n` +
       `Tu consulta ha quedado registrada 😊\n\n` +
@@ -186,7 +186,7 @@ async function _transferFueraDeHorario(phone, session, extraNote, solicitud) {
       `Un asesor te contactará al inicio del siguiente horario de atención.`
     );
   } else {
-    await sendText(
+    await sendTextDirect(
       phone,
       `Hola ${nombre} 💙 Nuestro equipo académico atiende en el siguiente horario:\n\n` +
       `${getScheduleText()}\n\n` +
