@@ -177,9 +177,14 @@ app.post('/webhook/chatwoot', (req, res) => {
       console.log(`[webhook] Conversación resuelta: phone=${phone} conv=${conversationId} resolved_by=${session?.resolved_by || 'agent'}`);
 
       // CSAT ya no se envía aquí — se dispara por etiqueta 'enviar-csat' en conversation_updated.
-      // Solo procesamos el cierre por inactividad (goodbye simple).
+      // Siempre limpiar la sesión al cerrar: el próximo mensaje del usuario arranca desde cero.
       if (session?.resolved_by === 'inactivity') {
         sendSimpleGoodbye(phone).finally(() => deleteSession(phone));
+      } else {
+        // Cierre manual del asesor (o automático sin inactividad): limpiar sesión.
+        // Si el CSAT ya fue respondido, handleCsatReply ya llamó a deleteSession; esta
+        // llamada es no-op si la sesión ya no existe.
+        deleteSession(phone);
       }
       return;
     }
@@ -203,6 +208,8 @@ app.post('/webhook/chatwoot', (req, res) => {
 
       if (session?.resolved_by === 'inactivity') {
         sendSimpleGoodbye(phone).finally(() => deleteSession(phone));
+      } else {
+        deleteSession(phone);
       }
       return;
     }
