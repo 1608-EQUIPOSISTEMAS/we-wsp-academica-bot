@@ -103,6 +103,7 @@ async function deactivateBot(conversationId) {
 
 // ── Etiquetas ─────────────────────────────────────────────────────────────────
 
+/** Reemplaza TODAS las etiquetas de la conversación (uso interno). */
 async function setLabels(conversationId, labels) {
   try {
     await axios.post(
@@ -113,6 +114,31 @@ async function setLabels(conversationId, labels) {
   } catch (err) {
     console.error('[chatwoot] Error setLabels:', err.response?.data || err.message);
   }
+}
+
+/** Obtiene las etiquetas actuales de la conversación. */
+async function getLabels(conversationId) {
+  try {
+    const { data } = await axios.get(
+      apiUrl(`/accounts/${ACCOUNT_ID}/conversations/${conversationId}/labels`),
+      { headers: getHeaders() }
+    );
+    return data.payload || [];
+  } catch (err) {
+    console.error('[chatwoot] Error getLabels:', err.response?.data || err.message);
+    return [];
+  }
+}
+
+/**
+ * Añade y/o quita etiquetas sin sobrescribir las existentes.
+ * @param {string|number} conversationId
+ * @param {{ add?: string[], remove?: string[] }} opts
+ */
+async function updateLabels(conversationId, { add = [], remove = [] } = {}) {
+  const current = await getLabels(conversationId);
+  const updated  = [...new Set([...current.filter(l => !remove.includes(l)), ...add])];
+  await setLabels(conversationId, updated);
 }
 
 // ── Atributos personalizados ──────────────────────────────────────────────────
@@ -205,7 +231,9 @@ async function checkAgentReplied(conversationId, sinceMs = 0) {
   const messages = await getConversationMessages(conversationId);
 
   for (const msg of messages) {
-    if (msg.message_type === 1 && !msg.private) {
+    // Requiere sender.id explícito: mensajes del bot enviados por Meta API directa
+    // (sendTextDirect) pueden aparecer ecos sin sender de agente → se excluyen.
+    if (msg.message_type === 1 && !msg.private && msg.sender?.id) {
       const ts = msg.created_at ? msg.created_at * 1000 : Date.now();
       if (sinceMs && ts < sinceMs) continue;
       console.log(`[chatwoot] checkAgentReplied: encontrado msg de agente "${msg.sender?.name}" (id=${msg.sender?.id}) ts=${new Date(ts).toISOString()} en conv=${conversationId}`);
@@ -225,7 +253,7 @@ async function checkAgentReplied(conversationId, sinceMs = 0) {
 function tagFlow(phone, labels, tema = null) {
   const convId = getSession(phone)?.conversationId;
   if (!convId) return;
-  setLabels(convId, labels);
+  updateLabels(convId, { add: labels });
   if (tema) setCustomAttributes(convId, { tema_consulta: tema });
 }
 
@@ -249,6 +277,8 @@ module.exports = {
   openConversation,
   deactivateBot,
   setLabels,
+  getLabels,
+  updateLabels,
   setCustomAttributes,
   assignTeam,
   assignAgent,

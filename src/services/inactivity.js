@@ -20,8 +20,8 @@
  */
 
 const { getAllSessions, updateSession, deleteSession } = require('./session');
-const { sendText }                                     = require('./whatsapp');
-const { setLabels, resolveConversation, addPrivateNote, checkAgentReplied } = require('./chatwoot');
+const { sendText, sendTextDirect }                     = require('./whatsapp');
+const { updateLabels, resolveConversation, addPrivateNote, checkAgentReplied } = require('./chatwoot');
 const { getScheduleText }                              = require('./schedule');
 
 // ── Modo test: tiempos reducidos para depuración ────────────────────────────
@@ -85,7 +85,7 @@ async function runInactivityCycle() {
           try {
             await sendText(phone, `¡Que tengas un buen día! 💙 Hasta pronto.`);
             if (session.conversationId) {
-              setLabels(session.conversationId, ['resuelto-bot']);
+              updateLabels(session.conversationId, { add: ['resuelto-bot'] });
               resolveConversation(session.conversationId);
             }
           } catch (err) {
@@ -101,7 +101,7 @@ async function runInactivityCycle() {
         if (session.csat_sent_at && now - session.csat_sent_at >= CSAT_TIMEOUT_MS) {
           console.log(`[inactivity] CASO5 CSAT timeout: phone=${phone}`);
           try {
-            await sendText(
+            await sendTextDirect(
               phone,
               `¡Gracias por contactarnos! 😊\n` +
               `Que tengas un excelente día 💙\n` +
@@ -109,6 +109,12 @@ async function runInactivityCycle() {
             );
           } catch (err) {
             console.error('[inactivity] Error CASO5 cierre CSAT:', err.message);
+          }
+          if (session.conversationId) {
+            updateLabels(session.conversationId, { add: ['resuelto-inactividad'], remove: ['csat-enviado'] })
+              .catch(err => console.error('[inactivity] Error CASO5 updateLabels:', err.message));
+            resolveConversation(session.conversationId)
+              .catch(err => console.error('[inactivity] Error CASO5 resolveConversation:', err.message));
           }
           deleteSession(phone);
         }
@@ -137,7 +143,7 @@ async function runInactivityCycle() {
           console.log(`[inactivity] CASO4 cierre por inactividad: phone=${phone}`);
           updateSession(phone, { resolved_by: 'inactivity' });
           try {
-            await sendText(
+            await sendTextDirect(
               phone,
               `Entendemos que en este momento no puedes responder 😊\n` +
               `Cuando tengas tiempo escríbenos nuevamente,\n` +
@@ -145,7 +151,7 @@ async function runInactivityCycle() {
               `⏰ Horario de atención:\n${getScheduleText()}`
             );
             if (session.conversationId) {
-              setLabels(session.conversationId, ['resuelto-inactividad']);
+              updateLabels(session.conversationId, { add: ['resuelto-inactividad'] });
               resolveConversation(session.conversationId);
             }
           } catch (err) {
@@ -205,13 +211,13 @@ async function runInactivityCycle() {
                 updates.alumno_respondio_post_asesor = true;
                 console.log(`[inactivity] Retroactivo: alumno ya había respondido post-asesor phone=${phone}`);
               }
-              // Nuevo mensaje del asesor → resetear flags CASO 3B (nuevo ciclo)
-              // y resetear alumno_respondio_post_asesor (ahora toca al alumno responder)
+              // Nuevo mensaje del asesor → resetear flags CASO 3B y CASO 3 (nuevo ciclo)
               if (isNewMsg) {
                 updates.asesor_no_responde_msg_sent        = false;
                 updates.asesor_no_responde_alumno_msg_sent = false;
                 updates.alumno_respondio_post_asesor       = false;
-                console.log(`[inactivity] Nuevo msg asesor: reseteando flags CASO 3B + alumno_respondio phone=${phone}`);
+                updates.asesor_inactivity_msg_sent         = false;
+                console.log(`[inactivity] Nuevo msg asesor: reseteando flags CASO 3 + 3B + alumno_respondio phone=${phone}`);
               }
               updateSession(phone, updates);
 
@@ -223,6 +229,7 @@ async function runInactivityCycle() {
                 session.asesor_no_responde_msg_sent        = false;
                 session.asesor_no_responde_alumno_msg_sent = false;
                 session.alumno_respondio_post_asesor       = false;
+                session.asesor_inactivity_msg_sent         = false;
               }
               inactivoAlumno = now - (keepActivity ? currentActivity : respondedAt);
             }
@@ -259,13 +266,13 @@ async function runInactivityCycle() {
         console.log(`[inactivity] CASO3 advertencia inactividad alumno: phone=${phone} (alumno no respondió al asesor)`);
         updateSession(phone, { asesor_inactivity_msg_sent: true });
         try {
-          await sendText(
+          await sendTextDirect(
             phone,
             `¿Sigues ahí? 😊\n` +
             `Estaré esperando tu respuesta por unos minutos más ⏳`
           );
           if (session.conversationId) {
-            setLabels(session.conversationId, ['inactivo']);
+            updateLabels(session.conversationId, { add: ['inactivo'] });
           }
         } catch (err) {
           console.error('[inactivity] Error CASO3 advertencia:', err.message);
@@ -283,7 +290,7 @@ async function runInactivityCycle() {
           console.log(`[inactivity] CASO3B-2 aviso al alumno: phone=${phone} espera=${Math.floor(esperaAlumno/60000)}min`);
           updateSession(phone, { asesor_no_responde_alumno_msg_sent: true });
           try {
-            await sendText(
+            await sendTextDirect(
               phone,
               `Lamentamos la espera 🙏\n` +
               `Tu caso sigue siendo atendido.\n` +
@@ -323,7 +330,7 @@ async function runInactivityCycle() {
         console.log(`[inactivity] CASO2 aviso espera asesor: phone=${phone}`);
         updateSession(phone, { transfer_wait_msg_sent: true });
         try {
-          await sendText(
+          await sendTextDirect(
             phone,
             `Lamentamos la espera 🙏\n` +
             `Estamos atendiendo varios casos en este momento,\n` +

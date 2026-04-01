@@ -116,6 +116,26 @@ async function sendText(phone, body) {
   });
 }
 
+/**
+ * Envía texto directo por Meta API (no crea mensaje outgoing de agente en Chatwoot).
+ * Usar para mensajes automáticos post-transfer (inactividad, espera, cierre) para que
+ * checkAgentReplied no los confunda con respuestas del asesor humano.
+ * Añade nota privada en Chatwoot para que el asesor vea qué envió el bot.
+ */
+async function sendTextDirect(phone, body) {
+  await metaSend({
+    messaging_product: 'whatsapp',
+    to:   phone,
+    type: 'text',
+    text: { body },
+  });
+  const session = getSession(phone);
+  if (session?.conversationId) {
+    addPrivateNote(session.conversationId, `🤖 Bot (automático):\n${body}`)
+      .catch(err => console.error('[whatsapp] Error nota privada sendTextDirect:', err));
+  }
+}
+
 async function sendButtons(phone, body, buttons) {
   ({ buttons } = validateWhatsAppLimits({ buttons }));
   // 1. Interactivo real via Meta API
@@ -208,4 +228,4 @@ async function sendCtaUrl(phone, bodyText, displayText, url) {
     .catch(err => console.error('[whatsapp] Error en nota privada CTA:', err));
 }
 
-module.exports = { sendText, sendButtons, sendButtonsWithHeader, sendList, sendCtaUrl };
+module.exports = { sendText, sendTextDirect, sendButtons, sendButtonsWithHeader, sendList, sendCtaUrl };

@@ -1,6 +1,6 @@
 const { getSession, getOrCreateSession, updateSession, addToHistory, deleteSession } = require('./services/session');
 const { createCsat } = require('./services/database');
-const { assignAgent } = require('./services/chatwoot');
+const { assignAgent, updateLabels, resolveConversation } = require('./services/chatwoot');
 const { showBotResuelto, handleBotResuelto } = require('./flows/resuelto');
 const { sendText, sendButtons, sendList } = require('./services/whatsapp');
 const { buildProgramRows, PAGE_SIZE }     = require('./utils/programList');
@@ -266,7 +266,10 @@ async function route(phone, session, { text, buttonId, listId }) {
     case 'transferido': {  // 'transferido' como alias de compatibilidad
       // Registrar actividad del alumno (evita cierre por inactividad si está respondiendo al asesor)
       const atencionUpdates = { ultimaActividad: Date.now() };
-      if (session.asesor_respondio) atencionUpdates.alumno_respondio_post_asesor = true;
+      if (session.asesor_respondio) {
+        atencionUpdates.alumno_respondio_post_asesor = true;
+        atencionUpdates.asesor_inactivity_msg_sent   = false; // alumno respondió → cancelar el "¿Sigues ahí?" pendiente
+      }
       updateSession(phone, atencionUpdates);
 
       const normalized = normalizeText(text || '');
@@ -575,9 +578,9 @@ async function handleCsatReply(phone, rating, session) {
     `*W|E Educación Ejecutiva*`
   );
 
-  // Resolver conversación en Chatwoot si aún está abierta (puede haber sido reabierta)
+  // Marcar como completado (conservando etiquetas del ticket) y cerrar conversación
   if (session.conversationId) {
-    const { resolveConversation } = require('./services/chatwoot');
+    await updateLabels(session.conversationId, { add: ['csat-completado'], remove: ['csat-enviado'] }).catch(() => {});
     resolveConversation(session.conversationId).catch(() => {});
   }
 

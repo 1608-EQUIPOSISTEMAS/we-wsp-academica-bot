@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 
 const { handleIncoming }                                         = require('./bot');
-const { postMessage }                                            = require('./services/chatwoot');
+const { postMessage, updateLabels }                              = require('./services/chatwoot');
 const { getSession, deleteSession, updateSession,
         updateSessionByConvId }                                  = require('./services/session');
 const { sendText, sendList }                                     = require('./services/whatsapp');
@@ -69,6 +69,12 @@ async function sendCsatSurvey(phone, session) {
       csat_sent:    true,
       csat_sent_at: Date.now(),
     });
+
+    // Quitar 'enviar-csat' (evita re-disparo) y añadir 'csat-enviado' (guard anti-eco)
+    // conservando las etiquetas existentes del ticket.
+    const convId = session?.conversationId;
+    if (convId) updateLabels(convId, { add: ['csat-enviado'], remove: ['enviar-csat'] }).catch(() => {});
+
     console.log(`[webhook] CSAT enviado: phone=${phone}`);
   } catch (err) {
     if (!isWindowExpiredError(err)) {
@@ -170,12 +176,10 @@ app.post('/webhook/chatwoot', (req, res) => {
 
       console.log(`[webhook] Conversación resuelta: phone=${phone} conv=${conversationId} resolved_by=${session?.resolved_by || 'agent'}`);
 
+      // CSAT ya no se envía aquí — se dispara por etiqueta 'enviar-csat' en conversation_updated.
+      // Solo procesamos el cierre por inactividad (goodbye simple).
       if (session?.resolved_by === 'inactivity') {
-        // Cerrada por inactividad — solo despedida simple, sin CSAT
         sendSimpleGoodbye(phone).finally(() => deleteSession(phone));
-      } else {
-        // Cerrada por el asesor — enviar encuesta CSAT
-        sendCsatSurvey(phone, session || {});
       }
       return;
     }
@@ -199,8 +203,6 @@ app.post('/webhook/chatwoot', (req, res) => {
 
       if (session?.resolved_by === 'inactivity') {
         sendSimpleGoodbye(phone).finally(() => deleteSession(phone));
-      } else {
-        sendCsatSurvey(phone, session || {});
       }
       return;
     }
@@ -216,16 +218,35 @@ app.post('/webhook/chatwoot', (req, res) => {
       return;
     }
 
-    // ── Agente asignado a la conversación ────────────────────────────────────
-    // NOTA: conversation_updated se dispara al asignar agente (incluso por el bot).
-    // NO usarlo para detectar asesor_respondio — eso se verifica vía polling API
-    // en el monitor de inactividad (checkAgentReplied).
+    // ── Conversación actualizada (etiquetas, agente asignado, etc.) ─────────────
     if (event === 'conversation_updated') {
       const rawPhone = payload.contact?.phone_number
                     || payload.meta?.sender?.phone_number;
-      const agentId  = payload.meta?.assignee?.id
-                    || payload.conversation?.meta?.assignee?.id;
+      const convId   = payload.id || payload.conversation?.id;
+      const labels   = payload.labels || payload.conversation?.labels || [];
 
+      // ── Trigger CSAT: asesor añadió etiqueta 'enviar-csat' ─────────────────
+      if (labels.includes('enviar-csat') && rawPhone && convId) {
+        const phone   = rawPhone.replace(/^\+/, '');
+        const session = getSession(phone);
+
+        if (session?.csat_sent || session?.estado === 'esperando_csat') {
+          console.log(`[webhook] enviar-csat ignorado — CSAT ya enviado (sesión activa): phone=${phone}`);
+        } else if (labels.includes('csat-enviado') || labels.includes('csat-completado')) {
+          console.log(`[webhook] enviar-csat ignorado — CSAT ya procesado (label): phone=${phone}`);
+        } else {
+          console.log(`[webhook] enviar-csat detectado → disparando CSAT: phone=${phone} conv=${convId}`);
+          // Asegurar que la sesión tenga conversationId para que sendList funcione
+          updateSession(phone, { conversationId: convId });
+          sendCsatSurvey(phone, getSession(phone) || {});
+        }
+      }
+
+      // ── Agente asignado ─────────────────────────────────────────────────────
+      // NOTA: conversation_updated se dispara al asignar agente (incluso por el bot).
+      // NO usarlo para detectar asesor_respondio — eso se verifica vía polling API.
+      const agentId = payload.meta?.assignee?.id
+                   || payload.conversation?.meta?.assignee?.id;
       if (rawPhone && agentId) {
         const phone = rawPhone.replace(/^\+/, '');
         updateSession(phone, { conv_assigned_agent: agentId });
