@@ -8,6 +8,10 @@
  * CASO 2 — Transfer sin respuesta del asesor (5 min):
  *   Nadie tomó el caso → enviar mensaje de espera.
  *
+ * CASO 2B — Asesor nunca respondió en 24h:
+ *   Tras 24h desde el transfer sin ninguna respuesta del asesor.
+ *   → Mensaje de disculpa al alumno, nota privada, resolve en Chatwoot.
+ *
  * CASO 3 — Alumno inactivo mientras hay asesor (15 min):
  *   El asesor respondió pero el alumno dejó de contestar → "¿Sigues ahí?"
  *
@@ -23,6 +27,7 @@ const { getAllSessions, updateSession, deleteSession } = require('./session');
 const { sendText, sendTextDirect }                     = require('./whatsapp');
 const { updateLabels, resolveConversation, addPrivateNote, checkAgentReplied } = require('./chatwoot');
 const { getScheduleText }                              = require('./schedule');
+const { updateSolicitudStatus }                        = require('./database');
 
 // ── Modo test: tiempos reducidos para depuración ────────────────────────────
 const TEST_MODE = process.env.INACTIVITY_TEST_MODE === 'true';
@@ -33,15 +38,18 @@ const TRANSFER_WAIT_MS    = TEST_MODE ?  2 * 60 * 1000 :  5 * 60 * 1000; // CASO
 const HUMAN_WARN_MS       = TEST_MODE ?  3 * 60 * 1000 : 15 * 60 * 1000; // CASO 3
 const HUMAN_CLOSE_MS      = TEST_MODE ?  2 * 60 * 1000 : 20 * 60 * 1000; // CASO 4
 const CSAT_TIMEOUT_MS     = TEST_MODE ?  2 * 60 * 1000 : 10 * 60 * 1000; // CASO 5
-const ASESOR_WARN_MS      = TEST_MODE ?  3 * 60 * 1000 : 30 * 60 * 1000; // CASO 3B: nota privada al asesor
-const ASESOR_ALUMNO_MS    = TEST_MODE ?  4 * 60 * 1000 : 60 * 60 * 1000; // CASO 3B: msg al alumno
+const ASESOR_WARN_MS      = TEST_MODE ?  3 * 60 * 1000 :  30 * 60 * 1000; // CASO 3B: nota privada al asesor
+const ASESOR_ALUMNO_MS    = TEST_MODE ?  4 * 60 * 1000 :  60 * 60 * 1000; // CASO 3B: msg al alumno
+const ASESOR_NEVER_MS     = TEST_MODE ? 10 * 60 * 1000 : 24 * 60 * 60 * 1000; // CASO 2B: asesor nunca respondió
+const ASESOR_CLOSE_MS     = TEST_MODE ?  6 * 60 * 1000 : 24 * 60 * 60 * 1000; // CASO 3B-3: cierre tras 24h sin respuesta del asesor (post-3B-2)
+const FUERA_HORARIO_MS    = TEST_MODE ? 15 * 60 * 1000 : 72 * 60 * 60 * 1000; // CASO FH: fuera de horario, 72h sin respuesta del asesor
 
 function _mins(ms) { return ms == null ? 'N/A' : Math.floor((Date.now() - ms) / 60000) + ' min'; }
 
 function startInactivityWatcher() {
   if (TEST_MODE) {
     console.log('[inactivity] ⚠️  TEST MODE activo — tiempos reducidos:');
-    console.log(`  CASO1=${BOT_IDLE_MS/60000}m  CASO2=${TRANSFER_WAIT_MS/60000}m  CASO3=${HUMAN_WARN_MS/60000}m  CASO3B-nota=${ASESOR_WARN_MS/60000}m  CASO3B-msg=${ASESOR_ALUMNO_MS/60000}m  CASO4=${HUMAN_CLOSE_MS/60000}m  CASO5=${CSAT_TIMEOUT_MS/60000}m`);
+    console.log(`  CASO1=${BOT_IDLE_MS/60000}m  CASO2=${TRANSFER_WAIT_MS/60000}m  CASO2B=${ASESOR_NEVER_MS/60000}m  CASO3=${HUMAN_WARN_MS/60000}m  CASO3B-nota=${ASESOR_WARN_MS/60000}m  CASO3B-msg=${ASESOR_ALUMNO_MS/60000}m  CASO3B-cierre=${ASESOR_CLOSE_MS/60000}m  CASO4=${HUMAN_CLOSE_MS/60000}m  CASO5=${CSAT_TIMEOUT_MS/60000}m  CASO-FH=${FUERA_HORARIO_MS/60000}m`);
   }
 
   setInterval(() => runInactivityCycle(), INTERVAL_MS);
@@ -127,8 +135,41 @@ async function runInactivityCycle() {
       // Ignorar sesiones que ya se están cerrando por inactividad
       if (session.resolved_by) continue;
 
-      // Fuera de horario: ya se avisó al alumno, no disparar mensajes de inactividad
-      if (session.fuera_de_horario) continue;
+      // ── CASO FH — Fuera de horario: cierre forzoso tras 72h sin asesor ──────
+      if (session.fuera_de_horario) {
+        if (session.transfer_at && now - session.transfer_at >= FUERA_HORARIO_MS) {
+          console.log(`[inactivity] CASO FH cierre 72h fuera de horario: phone=${phone}`);
+          try {
+            await sendTextDirect(
+              phone,
+              `¡Hola! Lamentamos la demora 🙏\n` +
+              `Nuestros asesores han experimentado un alto volumen de mensajes.\n\n` +
+              `Hemos cerrado esta solicitud temporalmente, pero si aún necesitas ayuda,\n` +
+              `por favor vuelve a escribirnos un *"Hola"* para reiniciar el menú 💙`
+            );
+          } catch (err) {
+            console.error('[inactivity] Error CASO FH mensaje alumno:', err.message);
+          }
+          if (session.lastTicketNumber) {
+            updateSolicitudStatus(session.lastTicketNumber, 'ABANDONADO')
+              .catch(err => console.error('[inactivity] Error CASO FH updateSolicitudStatus:', err.message));
+          }
+          if (session.conversationId) {
+            addPrivateNote(
+              session.conversationId,
+              `⏰ *Bot: cierre automático — fuera de horario sin respuesta en 72h*\n` +
+              `Ningún asesor respondió desde el transfer (${new Date(session.transfer_at).toLocaleString('es-PE', { timeZone: 'America/Lima' })}).\n` +
+              `La conversación fue cerrada automáticamente por el sistema.`
+            ).catch(err => console.error('[inactivity] Error CASO FH nota privada:', err.message));
+            updateLabels(session.conversationId, { add: ['resuelto-inactividad', 'sin-respuesta-asesor'] })
+              .catch(err => console.error('[inactivity] Error CASO FH labels:', err.message));
+            resolveConversation(session.conversationId)
+              .catch(err => console.error('[inactivity] Error CASO FH resolveConversation:', err.message));
+          }
+          deleteSession(phone);
+        }
+        continue; // dentro del plazo: no aplicar ningún otro CASO
+      }
 
       let inactivoAlumno = now - (session.ultimaActividad || session.ultimaInteraccion);
 
@@ -285,6 +326,40 @@ async function runInactivityCycle() {
       if (alumnoRespondioDespues) {
         const esperaAlumno = now - session.ultimaActividad;
 
+        // 3B-3: Cierre forzoso (24h / 6 min test) — asesor no respondió tras todos los avisos
+        if (session.asesor_no_responde_alumno_msg_sent && esperaAlumno >= ASESOR_CLOSE_MS) {
+          console.log(`[inactivity] CASO3B-3 cierre forzoso sin respuesta asesor: phone=${phone} espera=${Math.floor(esperaAlumno/60000)}min`);
+          try {
+            await sendTextDirect(
+              phone,
+              `¡Hola! Lamentamos la demora 🙏\n` +
+              `Nuestros asesores han experimentado un alto volumen de mensajes.\n\n` +
+              `Hemos cerrado esta solicitud temporalmente, pero si aún necesitas ayuda,\n` +
+              `por favor vuelve a escribirnos un *"Hola"* para reiniciar el menú 💙`
+            );
+          } catch (err) {
+            console.error('[inactivity] Error CASO3B-3 mensaje alumno:', err.message);
+          }
+          if (session.lastTicketNumber) {
+            updateSolicitudStatus(session.lastTicketNumber, 'ABANDONADO')
+              .catch(err => console.error('[inactivity] Error CASO3B-3 updateSolicitudStatus:', err.message));
+          }
+          if (session.conversationId) {
+            addPrivateNote(
+              session.conversationId,
+              `⏰ *Bot: cierre automático — asesor sin respuesta tras avisos (CASO 3B-3)*\n` +
+              `El asesor dejó de responder al alumno. Último mensaje del alumno: ${new Date(session.ultimaActividad).toLocaleString('es-PE', { timeZone: 'America/Lima' })}.\n` +
+              `La conversación fue cerrada automáticamente por el sistema.`
+            ).catch(err => console.error('[inactivity] Error CASO3B-3 nota privada:', err.message));
+            updateLabels(session.conversationId, { add: ['resuelto-inactividad', 'sin-respuesta-asesor'] })
+              .catch(err => console.error('[inactivity] Error CASO3B-3 labels:', err.message));
+            resolveConversation(session.conversationId)
+              .catch(err => console.error('[inactivity] Error CASO3B-3 resolveConversation:', err.message));
+          }
+          deleteSession(phone);
+          continue;
+        }
+
         // 3B-2: Mensaje al alumno (60 min / 4 min test)
         if (session.asesor_no_responde_msg_sent && !session.asesor_no_responde_alumno_msg_sent && esperaAlumno >= ASESOR_ALUMNO_MS) {
           console.log(`[inactivity] CASO3B-2 aviso al alumno: phone=${phone} espera=${Math.floor(esperaAlumno/60000)}min`);
@@ -339,6 +414,44 @@ async function runInactivityCycle() {
         } catch (err) {
           console.error('[inactivity] Error CASO2 aviso espera:', err.message);
         }
+      }
+
+      // ── CASO 2B — Asesor nunca respondió en 24h ───────────────────────────
+      if (
+        !session.asesor_respondio &&
+        session.transfer_at &&
+        now - session.transfer_at >= ASESOR_NEVER_MS
+      ) {
+        console.log(`[inactivity] CASO2B cierre por asesor sin respuesta 24h: phone=${phone}`);
+        try {
+          await sendTextDirect(
+            phone,
+            `¡Hola! Lamentamos la demora 🙏\n` +
+            `Nuestros asesores han experimentado un alto volumen de mensajes.\n\n` +
+            `Hemos cerrado esta solicitud temporalmente, pero si aún necesitas ayuda,\n` +
+            `por favor vuelve a escribirnos un *"Hola"* para reiniciar el menú 💙`
+          );
+        } catch (err) {
+          console.error('[inactivity] Error CASO2B mensaje alumno:', err.message);
+        }
+        if (session.lastTicketNumber) {
+          updateSolicitudStatus(session.lastTicketNumber, 'ABANDONADO')
+            .catch(err => console.error('[inactivity] Error CASO2B updateSolicitudStatus:', err.message));
+        }
+        if (session.conversationId) {
+          addPrivateNote(
+            session.conversationId,
+            `⏰ *Bot: cierre automático — asesor sin respuesta en 24h*\n` +
+            `Ningún asesor respondió desde el transfer (${new Date(session.transfer_at).toLocaleString('es-PE', { timeZone: 'America/Lima' })}).\n` +
+            `La conversación fue cerrada automáticamente por el sistema.`
+          ).catch(err => console.error('[inactivity] Error CASO2B nota privada:', err.message));
+          updateLabels(session.conversationId, { add: ['resuelto-inactividad', 'sin-respuesta-asesor'] })
+            .catch(err => console.error('[inactivity] Error CASO2B labels:', err.message));
+          resolveConversation(session.conversationId)
+            .catch(err => console.error('[inactivity] Error CASO2B resolveConversation:', err.message));
+        }
+        deleteSession(phone);
+        continue;
       }
     }
 }

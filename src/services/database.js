@@ -1,11 +1,12 @@
 const { Pool } = require('pg');
 
+const fallbackConnectionString =
+  `postgresql://${process.env.DB_USER || 'postgres'}:${process.env.DB_PASSWORD}` +
+  `@${process.env.DB_HOST || 'crm-postgres'}:${process.env.DB_PORT || '5432'}` +
+  `/${process.env.DB_NAME || 'neondb'}`;
+
 const pool = new Pool({
-  host:     process.env.DB_HOST     || 'crm-postgres',
-  port:     parseInt(process.env.DB_PORT || '5432'),
-  database: process.env.DB_NAME     || 'neondb',
-  user:     process.env.DB_USER     || 'postgres',
-  password: process.env.DB_PASSWORD,
+  connectionString: process.env.DATABASE_URL || fallbackConnectionString,
 });
 
 pool.on('error', (err) => {
@@ -120,6 +121,21 @@ async function createSolicitud(studentId, convId, tipo, programName, programId, 
   return rows[0];
 }
 
+// ── Actualización de estado de solicitud ─────────────────────────────────────
+
+/**
+ * Actualiza el estado de un ticket en solicitudes_bot.
+ * @param {string} ticketNumber — Número de ticket (ej. TKT-2026-00001)
+ * @param {string} status       — Nuevo estado (ej. 'ABANDONADO', 'RESUELTO')
+ */
+async function updateSolicitudStatus(ticketNumber, status) {
+  if (!ticketNumber) return;
+  await pool.query(
+    `UPDATE solicitudes_bot SET status = $1, updated_at = NOW() WHERE ticket_number = $2`,
+    [status, ticketNumber]
+  );
+}
+
 // ── CSAT ──────────────────────────────────────────────────────────────────────
 
 /**
@@ -228,6 +244,7 @@ module.exports = {
   getAllStudentPrograms,
   getStudentPresencialPrograms,
   createSolicitud,
+  updateSolicitudStatus,
   createCsat,
   runMigration,
   testConnection,

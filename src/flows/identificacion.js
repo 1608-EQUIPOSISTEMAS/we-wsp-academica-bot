@@ -14,15 +14,20 @@ function normalizePhone(p) {
 async function startIdentificacion(phone) {
   const dentroHorario = isWithinBusinessHours();
 
-  const mensaje = dentroHorario
-    ? `👋 ¡Hola! Bienvenido/a a *W|E Educación Ejecutiva* 💙\n\n` +
-      `Para brindarte una mejor atención, por favor indícanos el correo con el que te inscribiste:`
-    : `👋 ¡Hola! Bienvenido/a a *W|E Educación Ejecutiva* 💙\n\n` +
-      `En este momento nuestros asesores no están disponibles, pero puedo ayudarte con consultas automáticas 🤖\n\n` +
-      `⏰ *Horario de atención:*\n${getScheduleText()}\n\n` +
-      `Por favor indícanos el correo con el que te inscribiste:`;
+  await sendText(
+    phone,
+    `👋 ¡Hola! Bienvenido/a a *W|E Educación Ejecutiva*\nSoy **Eva**, tu asistente W|E 😊\nEstoy aquí para ayudarte`
+  );
 
-  await sendText(phone, mensaje);
+  await new Promise(resolve => setTimeout(resolve, 1000));
+
+  const segundoMensaje = dentroHorario
+    ? `Por favor, indícame el correo electrónico con el que realizaste tu inscripción para poder brindarte una mejor atención`
+    : `En este momento nuestros asesores no están disponibles, pero puedo ayudarte con consultas automáticas 🤖\n\n` +
+      `⏰ *Horario de atención:*\n${getScheduleText()}\n\n` +
+      `Por favor, indícame el correo electrónico con el que realizaste tu inscripción`;
+
+  await sendText(phone, segundoMensaje);
   updateSession(phone, { estado: 'esperando_correo' });
   tagFlow(phone, ['bot-activo']);
 }
