@@ -218,10 +218,13 @@ async function runInactivityCycle() {
         if (shouldPoll) {
           try {
             // sinceMs: si ya detectamos al asesor, buscar msgs POSTERIORES (+1ms para
-            // excluir el msg ya conocido). Si no, buscar desde el transfer (-5s margen).
+            // excluir el msg ya conocido). Si no, buscar desde el transfer en adelante.
+            // IMPORTANTE: NO usar transfer_at - 5000 porque los mensajes del bot enviados
+            // justo antes del transfer (menús, listas) tienen sender.id del agente API y
+            // serían detectados como respuesta humana (falso positivo).
             const sinceMs = session.asesor_respondio
               ? session.asesor_respondio_at + 1
-              : Math.max(0, (session.transfer_at || 0) - 5000);
+              : session.transfer_at || 0;
 
             const { responded, respondedAt } = await checkAgentReplied(
               session.conversationId,

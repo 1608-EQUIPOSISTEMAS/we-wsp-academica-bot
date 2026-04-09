@@ -233,7 +233,7 @@ async function checkAgentReplied(conversationId, sinceMs = 0) {
   for (const msg of messages) {
     // Requiere sender.id explícito: mensajes del bot enviados por Meta API directa
     // (sendTextDirect) pueden aparecer ecos sin sender de agente → se excluyen.
-    if (msg.message_type === 1 && !msg.private && msg.sender?.id) {
+    if (msg.message_type === 1 && msg.private === false && msg.sender?.id) {
       const ts = msg.created_at ? msg.created_at * 1000 : Date.now();
       if (sinceMs && ts < sinceMs) continue;
       console.log(`[chatwoot] checkAgentReplied: encontrado msg de agente "${msg.sender?.name}" (id=${msg.sender?.id}) ts=${new Date(ts).toISOString()} en conv=${conversationId}`);

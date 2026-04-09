@@ -1,7 +1,6 @@
 const { sendText, sendCtaUrl, sendButtons } = require('../services/whatsapp');
 const { updateSession }                     = require('../services/session');
 const { tagFlow }                           = require('../services/chatwoot');
-const { findMembershipByEmail }             = require('../services/database');
 const { runTransfer }                       = require('./transfer');
 const { showMenu }                          = require('./menu');
 
@@ -9,16 +8,7 @@ async function showInscripcion(phone, session) {
   updateSession(phone, { ultimoTema: 'inscripcion' });
   tagFlow(phone, ['bot-activo', 'inscripcion'], 'Inscripción');
 
-  let membership = { isMember: false };
-  if (session.correo) {
-    try {
-      membership = await findMembershipByEmail(session.correo);
-    } catch (err) {
-      console.error('[inscripcion] Error consultando membresía:', err.message);
-    }
-  }
-
-  if (membership.isMember) {
+  if (session.verified === true && session.isMember === true) {
     await sendText(
       phone,
       `📩 Te comparto el link de inscripción para que puedas registrarte en el curso o programa de tu interés:\n` +

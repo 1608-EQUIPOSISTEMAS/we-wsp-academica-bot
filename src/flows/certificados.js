@@ -6,7 +6,6 @@ const { showMenu }                       = require('./menu');
 const { askReclamoDatos }                = require('./reclamo');
 const { showBotResuelto }               = require('./resuelto');
 const { getAllStudentPrograms, createSolicitud } = require('../services/database');
-const { buildProgramRows, PAGE_SIZE }            = require('../utils/programList');
 const { isWithinBusinessHours, getScheduleText } = require('../services/schedule');
 
 // ── Tabla de tiempos (Rama A) ─────────────────────────────────────────────────
@@ -32,6 +31,31 @@ const CERT_INFO = {
     nota:  'Los días hábiles no cuentan fines de semana ni feriados.',
   },
 };
+
+// ── Helpers de UI para el List Message ───────────────────────────────────────
+
+/** Trunca el título a 24 chars con '...' si es más largo (límite WhatsApp). */
+function _truncateTitle(name) {
+  if (!name) return '';
+  return name.length > 24 ? name.slice(0, 21) + '...' : name;
+}
+
+/**
+ * Genera la descripción de la fila según modalidad y año.
+ * EN_VIVO → "En Vivo | Año: 2025"
+ * ONLINE  → "Online"
+ * otros   → solo año si existe
+ */
+function _buildRowDescription(p) {
+  const year = p.start_date ? new Date(p.start_date).getUTCFullYear() : null;
+  if (p.modality === 'EN_VIVO') {
+    return year ? `En Vivo | Año: ${year}` : 'En Vivo';
+  }
+  if (p.modality === 'ONLINE') {
+    return 'Online';
+  }
+  return year ? String(year) : '';
+}
 
 // ── Entrada principal ─────────────────────────────────────────────────────────
 
@@ -70,31 +94,64 @@ async function _showCertProgramList(phone, session) {
     return _showCertRamaA(phone); // fallback graceful
   }
 
-  if (programs.length === 0) {
-    return _showCertRamaA(phone);
-  }
+  if (programs.length === 0) return _showCertRamaA(phone);
+
+  // Ordenar por fecha de inicio descendente (más recientes primero)
+  programs.sort((a, b) => {
+    if (!a.start_date) return 1;
+    if (!b.start_date) return -1;
+    return new Date(b.start_date) - new Date(a.start_date);
+  });
+
+  // Guardar lista completa en sesión (necesaria para búsqueda y selección por índice)
+  updateSession(phone, { estado: 'flow_cert_programa', programOptions: programs });
 
   if (programs.length === 1) {
-    updateSession(phone, { programOptions: programs, programPage: 0 });
-    return _handleCertProgramSelected(phone, 0, session);
+    return _handleCertProgramSelected(phone, 0, { ...session, programOptions: programs });
   }
 
-  updateSession(phone, { estado: 'flow_cert_programa', programOptions: programs, programPage: 0 });
-  await _sendCertProgramPage(phone, programs, 0);
+  await _sendCertTop5(phone, programs);
 }
 
-async function _sendCertProgramPage(phone, programs, page) {
-  const rows = buildProgramRows(programs, page, 'cert');
-  const total = programs.length;
-  const pages = Math.ceil(total / PAGE_SIZE);
-  const footer = pages > 1 ? `Página ${page + 1} de ${pages}` : 'Selecciona un programa';
+async function _sendCertTop5(phone, allPrograms) {
+  const rows = allPrograms.slice(0, 5).map((p, i) => ({
+    id:          `cert_prog_${i}`,
+    title:       _truncateTitle(p.program_name),
+    description: _buildRowDescription(p),
+  }));
+
+  if (allPrograms.length > 5) {
+    rows.push({ id: 'cert_buscar', title: '🔍 Buscar otro programa...', description: '' });
+  }
+
   await sendList(
     phone,
     'Mis Programas',
     '¿Sobre cuál de tus programas tienes consulta de certificación? 📋',
-    footer,
+    'Selecciona un programa',
     '📋 Ver programas',
     [{ title: 'Tus programas', rows }]
+  );
+}
+
+async function _sendCertSearchResults(phone, keyword, results) {
+  const rows = results.slice(0, 9).map(p => ({
+    id:          `cert_prog_${p._index}`,
+    title:       _truncateTitle(p.program_name),
+    description: _buildRowDescription(p),
+  }));
+
+  if (results.length > 9) {
+    rows.push({ id: 'cert_buscar', title: '🔍 Refinar búsqueda...', description: '' });
+  }
+
+  await sendList(
+    phone,
+    'Resultados',
+    `Encontré *${results.length}* programa(s) con "*${keyword}*" 📋`,
+    'Selecciona el que buscas',
+    '📋 Ver resultados',
+    [{ title: 'Resultados', rows }]
   );
 }
 
@@ -107,13 +164,8 @@ async function _handleCertProgramSelected(phone, index, session) {
     return _showCertProgramList(phone, session);
   }
 
-  const certStatus = program.certificate_status || 'PENDIENTE';
-
-  // ── EMITIDO con URL ──────────────────────────────────────────────────────
-  if (certStatus === 'EMITIDO' && program.certificate_url) {
-    // Combinamos info + botones en un solo sendButtons para que lleguen juntos.
-    // (sendText va por Chatwoot→Meta; sendButtons va directo a Meta API —
-    //  si se envían por separado los botones llegan antes que el texto.)
+  // ── Con URL: certificado disponible ─────────────────────────────────────
+  if (program.certificate_url) {
     updateSession(phone, { estado: 'resuelto_bot', resuelto_bot_at: Date.now() });
     await sendButtons(
       phone,
@@ -130,11 +182,7 @@ async function _handleCertProgramSelected(phone, index, session) {
     return;
   }
 
-  // ── PENDIENTE o BLOQUEADO → crear ticket ────────────────────────────────
-  const notes = certStatus === 'BLOQUEADO'
-    ? 'Certificado bloqueado — requiere revisión'
-    : 'Alumno consultó por certificado pendiente via bot';
-
+  // ── Sin URL: certificado aún no generado → crear ticket ─────────────────
   let solicitud;
   try {
     solicitud = await createSolicitud(
@@ -143,7 +191,7 @@ async function _handleCertProgramSelected(phone, index, session) {
       'CERTIFICADO_PENDIENTE',
       program.program_name,
       program.id,
-      notes,
+      'Alumno consultó por certificado — aún no generado en el sistema',
       phone
     );
   } catch (err) {
@@ -153,33 +201,29 @@ async function _handleCertProgramSelected(phone, index, session) {
     return;
   }
 
-  const headerText = certStatus === 'BLOQUEADO'
-    ? `Tu certificado tiene una observación pendiente 😔\nHemos registrado tu caso 📋`
-    : `Hemos registrado tu consulta 📋`;
-
   const dentroHorario = isWithinBusinessHours();
 
   if (dentroHorario) {
     await sendText(
       phone,
-      `${headerText}\n\n` +
+      `Aún no has generado tu certificado para este programa o está en proceso 📋\n\n` +
       `🎫 *Número de ticket: ${solicitud.ticket_number}*\n` +
-      `📄 Programa: ${program.program_name}\n\n` +
+      `📄 Programa: *${program.program_name}*\n\n` +
       `Un asesor del equipo académico revisará tu caso y se comunicará contigo a la brevedad 💙\n` +
       `⏱️ Tiempo estimado: 15 minutos`
     );
     await runTransfer(
       phone,
       { ...session, ultimoTema: 'certificacion' },
-      `Ticket ${solicitud.ticket_number} — ${notes}`,
+      `Ticket ${solicitud.ticket_number} — certificado pendiente de generación`,
       { skipTicket: true }
     );
   } else {
     await sendText(
       phone,
-      `${headerText}\n\n` +
+      `Aún no has generado tu certificado para este programa o está en proceso 📋\n\n` +
       `🎫 *Número de ticket: ${solicitud.ticket_number}*\n` +
-      `📄 Programa: ${program.program_name}\n\n` +
+      `📄 Programa: *${program.program_name}*\n\n` +
       `Tu ticket quedó registrado y será atendido al inicio del siguiente horario 😊\n\n` +
       `⏰ Nuestro equipo atiende:\n${getScheduleText()}`
     );
@@ -187,18 +231,47 @@ async function _handleCertProgramSelected(phone, index, session) {
   }
 }
 
+// ── Búsqueda libre de programa ────────────────────────────────────────────────
+
+async function handleCertSearch(phone, keyword, session) {
+  const allPrograms = session.programOptions || [];
+  const kw          = keyword.trim().toLowerCase();
+
+  const results = allPrograms
+    .map((p, i) => ({ ...p, _index: i }))
+    .filter(p => p.program_name.toLowerCase().includes(kw));
+
+  if (results.length === 0) {
+    await sendButtons(
+      phone,
+      `No encontré ningún programa con "*${keyword}*" 😔\n¿Qué deseas hacer?`,
+      [
+        { id: 'cert_buscar', title: '🔍 Buscar de nuevo' },
+        { id: 'cert_asesor', title: '💬 Hablar con asesor' },
+      ]
+    );
+    // Mantener estado flow_cert_busqueda para que el alumno pueda reintentar
+    updateSession(phone, { estado: 'flow_cert_busqueda' });
+    return;
+  }
+
+  updateSession(phone, { estado: 'flow_cert_programa' });
+  await _sendCertSearchResults(phone, keyword, results);
+}
+
 // ── Router único para todos los pasos del flujo ──────────────────────────────
 
 async function handleCertReply(phone, buttonId, session) {
 
-  // ── Paginación de programas ──────────────────────────────────────────────
-  if (buttonId === 'prog_ver_mas' || buttonId === 'prog_anterior') {
-    const programs    = session.programOptions || [];
-    const currentPage = session.programPage ?? 0;
-    const newPage     = buttonId === 'prog_ver_mas' ? currentPage + 1 : currentPage - 1;
-    const safePage    = Math.max(0, Math.min(newPage, Math.ceil(programs.length / PAGE_SIZE) - 1));
-    updateSession(phone, { programPage: safePage });
-    return _sendCertProgramPage(phone, programs, safePage);
+  // ── Buscador de programas ────────────────────────────────────────────────
+  if (buttonId === 'cert_buscar') {
+    updateSession(phone, { estado: 'flow_cert_busqueda' });
+    await sendText(
+      phone,
+      `¡Claro! Escribe el nombre o una palabra clave del programa que buscas 🔍\n` +
+      `_(ej: Finanzas, Marketing, Excel...)_`
+    );
+    return;
   }
 
   // ── Rama B: selección de programa ───────────────────────────────────────
@@ -285,4 +358,4 @@ async function handleCertReply(phone, buttonId, session) {
   }
 }
 
-module.exports = { showCertificados, handleCertReply };
+module.exports = { showCertificados, handleCertReply, handleCertSearch };

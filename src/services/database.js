@@ -17,7 +17,7 @@ pool.on('error', (err) => {
 
 async function findAlumnoByEmail(email) {
   const query = `
-    SELECT id, full_name, email, phone, is_active
+    SELECT id, full_name, email, phone, is_active, flag_odoo_validation
     FROM ods_student_bot
     WHERE LOWER(email) = LOWER($1) AND is_active = true
   `;
@@ -161,6 +161,170 @@ async function createCsat(convId, studentId, phone, ticketNumber, rating) {
   return rows[0];
 }
 
+// ── Membresía VIP ─────────────────────────────────────────────────────────────
+
+/**
+ * Verifica si el alumno tiene una membresía activa en la BD interna y actualiza
+ * membership_tier_name / membership_active en ods_student_bot.
+ *
+ * Ruta de JOINs:
+ *   person_contacts (email) → persons → customers → enrollments → membership_tiers
+ *
+ * @param  {string} email — Correo del alumno (insensible a mayúsculas)
+ * @returns {{ isMember: boolean, tier: string|null }}
+ */
+async function checkAndUpdateMembership(email) {
+  // ── 1. Buscar membresía activa y vigente ──────────────────────────────────
+
+  // TODO: Descomentar esto cuando se complete la migración a enrollments.
+  // const { rows } = await pool.query(
+  //   `SELECT mt.tier_name
+  //    FROM person_contacts pc
+  //    JOIN persons          pr ON pr.person_id          = pc.person_id
+  //    JOIN customers        c  ON c.person_id           = pr.person_id
+  //    JOIN enrollments      e  ON e.customer_id         = c.customer_id
+  //                             AND e.active             = 'Y'
+  //    JOIN membership_tiers mt ON mt.program_version_id = e.program_version_id
+  //    WHERE pc.value ILIKE $1
+  //      AND CURRENT_TIMESTAMP <= e.registration_date + (mt.duration_days || ' days')::interval
+  //    ORDER BY e.registration_date DESC
+  //    LIMIT 1`,
+  //   [email]
+  // );
+
+  // ── TEMPORAL: tablas gold, plata, black desde Google Sheets ──────────────
+  const { rows } = await pool.query(
+    `SELECT tier_name
+     FROM (
+       SELECT 'WE GOLD' AS tier_name, "CORREO" AS email, "F_REN"::timestamp AS fecha_vencimiento FROM gold
+       UNION ALL
+       SELECT 'WE PLAT' AS tier_name, "CORREO" AS email, "F_REN"::timestamp AS fecha_vencimiento FROM plata
+       UNION ALL
+       SELECT 'WE BLACK' AS tier_name, "CORREO" AS email, "F_REN"::timestamp AS fecha_vencimiento FROM black
+     ) AS temp_members
+     WHERE LOWER(email) = LOWER($1)
+       AND CURRENT_TIMESTAMP <= fecha_vencimiento
+     LIMIT 1`,
+    [email]
+  );
+
+  const found = rows.length > 0;
+  const tier  = found ? rows[0].tier_name : null;
+
+  // ── 2. Actualizar ods_student_bot ─────────────────────────────────────────
+  await pool.query(
+    `UPDATE ods_student_bot
+     SET membership_tier_name = $1,
+         membership_active    = $2,
+         updated_at           = NOW()
+     WHERE LOWER(email) = LOWER($3)`,
+    [tier, found, email]
+  );
+
+  console.log(`[membership] email=${email} → isMember=${found} tier=${tier || 'none'}`);
+  return { isMember: found, tier };
+}
+
+// ── Match de programas ONLINE ─────────────────────────────────────────────────
+
+/**
+ * Normaliza un string para match a prueba de balas:
+ * minúsculas + sin diacríticos + sin espacios.
+ * Ej: 'SQL Server Básico' → 'sqlserverbasico'
+ */
+function _normalizeForMatch(str) {
+  if (!str) return '';
+  return str
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // quitar acentos
+    .replace(/\s+/g, '');            // quitar todos los espacios
+}
+
+/**
+ * Busca el program_version_id en program_versions comparando
+ * la columna abbreviation (normalizada) contra el nombre raw de Odoo.
+ *
+ * @param  {string} rawName — Nombre tal como llega de Odoo (ej. "SQL Server Básico")
+ * @returns {number|null}
+ */
+async function findProgramVersionByAbbreviation(rawName) {
+  try {
+    const normalized = _normalizeForMatch(rawName);
+    const { rows } = await pool.query(
+      `SELECT program_version_id
+       FROM program_versions
+       WHERE LOWER(REPLACE(abbreviation, ' ', '')) = $1
+       LIMIT 1`,
+      [normalized]
+    );
+    return rows[0]?.program_version_id ?? null;
+  } catch (err) {
+    console.error('[database] Error findProgramVersionByAbbreviation:', err.message);
+    return null;
+  }
+}
+
+// ── Cronograma ────────────────────────────────────────────────────────────────
+
+/**
+ * Busca el edition_num_id en program_editions haciendo join con program_versions y programs.
+ * Coincide por fecha de inicio y por odoo_activation (ILIKE) en cualquiera de las dos tablas.
+ *
+ * @param {string} baseName  — Nombre base extraído por regex (ej. "Azure Data Fundamentals")
+ * @param {string} startDate — Fecha YYYY-MM-DD
+ * @returns {number|null}
+ */
+async function findProgramEditionByOdoo(baseName, startDate) {
+  try {
+    const { rows } = await pool.query(
+      `SELECT pe.edition_num_id
+       FROM program_editions pe
+       JOIN program_versions pv ON pv.program_version_id = pe.program_version_id
+       JOIN programs          p  ON p.program_id          = pv.program_id
+       WHERE pe.start_date = $1::date
+         AND (
+           pv.odoo_activation ILIKE '%' || $2 || '%'
+           OR  p.odoo_activation ILIKE '%' || $2 || '%'
+         )
+         AND pe.active = 'Y'
+       LIMIT 1`,
+      [startDate, baseName]
+    );
+    return rows[0]?.edition_num_id ?? null;
+  } catch (err) {
+    console.error('[database] Error findProgramEditionByOdoo:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Retorna los programas EN_VIVO activos del alumno con los links de acceso a clases.
+ * Solo devuelve registros que ya tienen program_edition_id vinculado (post-sync Odoo).
+ */
+async function getStudentCronograma(studentId) {
+  const { rows } = await pool.query(
+    `SELECT
+       sp.program_edition_id,
+       p.program_name,
+       pe.start_date,
+       pe.end_date,
+       pe.whatsapp_link,
+       pe.teams_link
+     FROM ods_student_programs  sp
+     JOIN program_editions       pe ON pe.edition_num_id     = sp.program_edition_id
+     JOIN program_versions       pv ON pv.program_version_id = pe.program_version_id
+     JOIN programs               p  ON p.program_id          = pv.program_id
+     WHERE sp.student_id          = $1
+       AND sp.modality             = 'EN_VIVO'
+       AND sp.program_edition_id  IS NOT NULL
+       AND pe.active              = 'Y'
+     ORDER BY pe.start_date ASC`,
+    [studentId]
+  );
+  return rows;
+}
+
 // ── Migración ─────────────────────────────────────────────────────────────────
 
 async function runMigration() {
@@ -246,6 +410,10 @@ module.exports = {
   createSolicitud,
   updateSolicitudStatus,
   createCsat,
+  checkAndUpdateMembership,
+  findProgramEditionByOdoo,
+  findProgramVersionByAbbreviation,
+  getStudentCronograma,
   runMigration,
   testConnection,
   pool,

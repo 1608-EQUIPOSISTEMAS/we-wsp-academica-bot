@@ -1,5 +1,7 @@
 const { sendText, sendButtons }               = require('../services/whatsapp');
-const { findAlumnoByEmail }                   = require('../services/database');
+const { findAlumnoByEmail,
+        checkAndUpdateMembership }            = require('../services/database');
+const { syncStudentFromOdoo }                 = require('../services/odoo');
 const { updateSession }                       = require('../services/session');
 const { tagFlow, tagAlumno }                  = require('../services/chatwoot');
 const { showMenu }                            = require('./menu');
@@ -44,7 +46,35 @@ async function handleCorreo(phone, email, session) {
     return;
   }
 
+  // ── Sync desde Odoo si el alumno no existe o aún no fue validado ──────────
+  const needsSync = !alumno || alumno.flag_odoo_validation === false;
+  if (needsSync) {
+    await sendText(phone, `⏳ Validando información...`);
+    try {
+      await syncStudentFromOdoo(emailClean);
+    } catch (err) {
+      console.error('[identificacion] Error sync Odoo:', err.message);
+      await sendText(
+        phone,
+        `Estamos experimentando demoras técnicas en la validación de tu historial.\n` +
+        `Por favor, intenta de nuevo en unos minutos.`
+      );
+      return;
+    }
+    // Re-consultar después del sync
+    try {
+      alumno = await findAlumnoByEmail(emailClean);
+    } catch (err) {
+      console.error('[identificacion] Error DB post-sync:', err);
+      await sendText(phone, '⚠️ Hubo un error al verificar tu correo. Por favor intenta de nuevo.');
+      return;
+    }
+  }
+
   if (alumno) {
+    if (needsSync) {
+      await sendText(phone, `✅ Listo, validación completada`);
+    }
     // ── Verificación de número (transparente — sin mensaje al alumno) ────────
     const sessionPhone = normalizePhone(phone);
     const dbPhone      = normalizePhone(alumno.phone);
@@ -57,15 +87,32 @@ async function handleCorreo(phone, email, session) {
 
     console.log(`[identificacion] phone verificado: ${verified} (sesión=${sessionPhone}, db=${dbPhone})`);
 
+    // ── Verificar membresía VIP (actualiza ods_student_bot y retorna estado) ──
+    let isMember    = false;
+    let membershipTier = null;
+    try {
+      const mem   = await checkAndUpdateMembership(emailClean);
+      isMember    = mem.isMember;
+      membershipTier = mem.tier;
+    } catch (err) {
+      console.error('[identificacion] Error verificando membresía:', err.message);
+      // No bloquear el flujo si la consulta de membresía falla
+    }
+
     updateSession(phone, {
-      nombre:    alumno.full_name,
-      correo:    alumno.email,
-      studentId: alumno.id,
+      nombre:        alumno.full_name,
+      correo:        alumno.email,
+      studentId:     alumno.id,
       verified,
-      estado:    'menu',
+      isMember,
+      membershipTier,
+      estado:        'menu',
     });
     tagAlumno(phone, alumno.full_name, alumno.email);
-    await sendText(phone, `✅ ¡Hola, ${alumno.full_name}! Te encontramos en el sistema 😊`);
+    const saludoInicial = (verified && isMember)
+      ? `¡Hola ${alumno.full_name}! Qué gusto saludar a un miembro ${membershipTier} 🖤`
+      : `✅ ¡Hola, ${alumno.full_name}! Te encontramos en el sistema 😊`;
+    await sendText(phone, saludoInicial);
     await showMenu(phone, alumno.full_name);
   } else {
     updateSession(phone, { estado: 'correo_no_encontrado' });

@@ -14,7 +14,7 @@ const {
   handleCorreoNoEncontrado,
 } = require('./flows/identificacion');
 const { showCampus, handleCampusReply }                  = require('./flows/campus');
-const { showCertificados, handleCertReply }              = require('./flows/certificados');
+const { showCertificados, handleCertReply, handleCertSearch } = require('./flows/certificados');
 const { showJustificaciones, handleJustificacionReply }  = require('./flows/justificaciones');
 const { showExamenes, handleExamenesReply }              = require('./flows/examenes');
 const { showMateriales, handleMaterialesReply }          = require('./flows/materiales');
@@ -22,6 +22,7 @@ const { showInstaladores, handleInstaladoresReply }      = require('./flows/inst
 const { askReclamoDatos, handleReclamoDatos }             = require('./flows/reclamo');
 const { showAlumnoFlex, handleAlumnoFlexReply }          = require('./flows/alumno_flex');
 const { showInscripcion, handleInscripcionReply }        = require('./flows/inscripcion');
+const { handleCronograma, handleCronogramaReply }        = require('./flows/cronograma');
 
 // ── Anti-duplicado ─────────────────────────────────────────────────────────────
 const processedIds  = new Set();
@@ -357,10 +358,21 @@ async function route(phone, session, { text, buttonId, listId }) {
       if (id) return handleCampusReply(phone, id, session);
       return; // texto libre ignorado — el alumno debe usar los botones
 
+    // ── Certificación — Rama B: búsqueda libre ───────────────────────────
+    case 'flow_cert_busqueda':
+      if (id) return handleCertReply(phone, id, session);   // cert_buscar / cert_asesor
+      if (text) return handleCertSearch(phone, text, session);
+      return;
+
     // ── Certificación — Rama B: selección de programa ─────────────────────
     case 'flow_cert_programa': {
       if (id) return handleCertReply(phone, id, session);
       if (text) {
+        // Chatwoot a veces envía el título de la fila en lugar del id.
+        // Detectar la opción de búsqueda por su texto antes de intentar resolveProgram.
+        if (normalizeText(text).includes('buscar')) {
+          return handleCertReply(phone, 'cert_buscar', session);
+        }
         const match = resolveProgram(text, session.programOptions);
         if (match) return handleCertReply(phone, `cert_prog_${match.index}`, session);
         await sendText(phone,
@@ -457,6 +469,34 @@ async function route(phone, session, { text, buttonId, listId }) {
       if (id) return handleInscripcionReply(phone, id, session);
       return;
 
+    // ── Cronograma — selección de programa En Vivo ─────────────────────
+    case 'flow_cronograma': {
+      if (id?.startsWith('crono_')) return handleCronogramaReply(phone, id, session);
+
+      // Chatwoot a veces envía el título de la fila como texto plano en lugar del id.
+      // Buscar en cronogramaOptions por nombre completo y por primeros 24 chars (límite visual WA).
+      if (text) {
+        const normInput = normalizeText(text);
+        const options   = session.cronogramaOptions || [];
+        const match     = options.find(p => {
+          const normFull  = normalizeText(p.program_name || '');
+          const normTitle = normFull.slice(0, 24);
+          return normFull === normInput || normTitle === normInput
+              || normFull.includes(normInput) || normInput.includes(normTitle);
+        });
+
+        if (match) {
+          return handleCronogramaReply(phone, `crono_${match.program_edition_id}`, session);
+        }
+
+        await sendText(
+          phone,
+          `No reconocí esa opción 😊\nPor favor selecciona un programa de la lista.`
+        );
+      }
+      return;
+    }
+
     // ── Menú principal / default ───────────────────────────────────────────
     case 'menu':
     default:
@@ -526,7 +566,12 @@ async function handleMenuOption(phone, optionId, session) {
 
     case 'hablar_asesor':
     case 'funciones_docente':
+      return runTransfer(phone, session);
+
     case 'cronograma':
+      if (process.env.ENABLE_VERIFIED_FLOW !== 'false' && session.verified && session.studentId) {
+        return handleCronograma(phone, session);
+      }
       return runTransfer(phone, session);
 
     case 'menu_principal':

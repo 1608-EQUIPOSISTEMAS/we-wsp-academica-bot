@@ -13,6 +13,51 @@ const PORT = process.env.PORT || 3005;
 
 app.use(express.json());
 
+// ── Debounce anti-flood (1.5s por teléfono) ───────────────────────────────────
+// Evita que ráfagas de mensajes rápidos disparen múltiples ejecuciones del bot.
+// Mensajes de texto → se concatenan con espacio.
+// Mensajes interactivos (botón/lista) → se procesan solos, sin concatenar.
+const DEBOUNCE_MS    = 1500;
+const pendingMessages = new Map(); // phone → { timer, conversationId, texts[], msg }
+
+function scheduleMessage(conversationId, phone, msg) {
+  const existing = pendingMessages.get(phone);
+
+  // Determinar si es texto libre (sin tipo de interacción)
+  const isText    = !msg.contentAttributes?.type;
+  const incoming  = isText ? (msg.content || '').trim() : null;
+
+  // Acumular textos del pending anterior si los hay
+  let texts = existing ? existing.texts : [];
+  if (existing) clearTimeout(existing.timer);
+
+  if (incoming) {
+    texts = [...texts, incoming];
+  } else {
+    // Mensaje interactivo: descartar textos acumulados y procesar solo este
+    texts = [];
+  }
+
+  const timer = setTimeout(() => {
+    pendingMessages.delete(phone);
+
+    // Si hay varios textos acumulados, fusionarlos en un solo content
+    const finalMsg = texts.length > 1
+      ? { ...msg, content: texts.join(' ') }
+      : msg;
+
+    if (texts.length > 1) {
+      console.log(`[debounce] Fusionados ${texts.length} mensajes de ${phone}: "${finalMsg.content}"`);
+    }
+
+    handleIncoming(conversationId, phone, finalMsg).catch(err =>
+      console.error('[bot] Error al procesar mensaje:', err)
+    );
+  }, DEBOUNCE_MS);
+
+  pendingMessages.set(phone, { timer, conversationId, texts, msg });
+}
+
 // ── Códigos Meta de ventana de 24h expirada ───────────────────────────────────
 const WINDOW_EXPIRED_CODES = new Set([131047, 131026]);
 
@@ -140,9 +185,7 @@ app.post('/webhook/chatwoot', (req, res) => {
         contentAttributes: payload.content_attributes || {},
       };
 
-      handleIncoming(conversationId, phone, msg).catch(err =>
-        console.error('[bot] Error al procesar mensaje:', err)
-      );
+      scheduleMessage(conversationId, phone, msg);
       return;
     }
 
