@@ -34,27 +34,46 @@ const CERT_INFO = {
 
 // ── Helpers de UI para el List Message ───────────────────────────────────────
 
-/** Trunca el título a 24 chars con '...' si es más largo (límite WhatsApp). */
-function _truncateTitle(name) {
-  if (!name) return '';
-  return name.length > 24 ? name.slice(0, 21) + '...' : name;
+/** Elimina sufijos de versión interna (V1–V7) del texto. */
+const _cleanVersion = (text) => text ? text.replace(/\s*V[1-7]\b/gi, '').trim() : '';
+
+/** Deduce el tipo de programa a partir del nombre. */
+function _deduceTipo(name) {
+  const n = (name || '').toLowerCase();
+  if (n.includes('diplomado'))     return 'Diplomado';
+  if (n.includes('especializaci')) return 'Especialización';
+  if (n.includes('pee'))           return 'PEE';
+  return 'Curso';
 }
 
 /**
- * Genera la descripción de la fila según modalidad y año.
- * EN_VIVO → "En Vivo | Año: 2025"
- * ONLINE  → "Online"
- * otros   → solo año si existe
+ * Título de la fila: si el nombre limpio supera 20 chars y hay abreviatura,
+ * usa la abreviatura limpia; de lo contrario usa el nombre limpio.
+ * Truncado de seguridad final a 24 chars (límite WhatsApp).
+ */
+function _buildRowTitle(p) {
+  const name = _cleanVersion(p.program_name || 'Programa');
+  const abbr = _cleanVersion(p.abbreviation || '');
+  const base = (name.length > 20 && abbr) ? abbr : name;
+  return base.length > 24 ? base.slice(0, 21) + '...' : base;
+}
+
+/**
+ * Genera la descripción de la fila según tipo y modalidad.
+ * EN_VIVO → "Diplomado | En Vivo | Año: 2025"
+ * ONLINE  → "Curso | Online"
+ * otros   → solo tipo
  */
 function _buildRowDescription(p) {
+  const tipo = _deduceTipo(p.program_name);
   const year = p.start_date ? new Date(p.start_date).getUTCFullYear() : null;
   if (p.modality === 'EN_VIVO') {
-    return year ? `En Vivo | Año: ${year}` : 'En Vivo';
+    return year ? `${tipo} | En Vivo | Año: ${year}` : `${tipo} | En Vivo`;
   }
   if (p.modality === 'ONLINE') {
-    return 'Online';
+    return `${tipo} | Online`;
   }
-  return year ? String(year) : '';
+  return tipo;
 }
 
 // ── Entrada principal ─────────────────────────────────────────────────────────
@@ -103,20 +122,23 @@ async function _showCertProgramList(phone, session) {
     return new Date(b.start_date) - new Date(a.start_date);
   });
 
-  // Guardar lista completa en sesión (necesaria para búsqueda y selección por índice)
-  updateSession(phone, { estado: 'flow_cert_programa', programOptions: programs });
+  // Enriquecer cada programa con el título renderizado (para matching en bot.js)
+  const programsWithTitle = programs.map(p => ({ ...p, renderedTitle: _buildRowTitle(p) }));
 
-  if (programs.length === 1) {
-    return _handleCertProgramSelected(phone, 0, { ...session, programOptions: programs });
+  // Guardar lista completa en sesión (necesaria para búsqueda y selección por índice)
+  updateSession(phone, { estado: 'flow_cert_programa', programOptions: programsWithTitle });
+
+  if (programsWithTitle.length === 1) {
+    return _handleCertProgramSelected(phone, 0, { ...session, programOptions: programsWithTitle });
   }
 
-  await _sendCertTop5(phone, programs);
+  await _sendCertTop5(phone, programsWithTitle);
 }
 
 async function _sendCertTop5(phone, allPrograms) {
   const rows = allPrograms.slice(0, 5).map((p, i) => ({
     id:          `cert_prog_${i}`,
-    title:       _truncateTitle(p.program_name),
+    title:       p.renderedTitle || _buildRowTitle(p),
     description: _buildRowDescription(p),
   }));
 
@@ -137,7 +159,7 @@ async function _sendCertTop5(phone, allPrograms) {
 async function _sendCertSearchResults(phone, keyword, results) {
   const rows = results.slice(0, 9).map(p => ({
     id:          `cert_prog_${p._index}`,
-    title:       _truncateTitle(p.program_name),
+    title:       p.renderedTitle || _buildRowTitle(p),
     description: _buildRowDescription(p),
   }));
 
@@ -239,7 +261,11 @@ async function handleCertSearch(phone, keyword, session) {
 
   const results = allPrograms
     .map((p, i) => ({ ...p, _index: i }))
-    .filter(p => p.program_name.toLowerCase().includes(kw));
+    .filter(p =>
+      p.program_name.toLowerCase().includes(kw) ||
+      (p.abbreviation || '').toLowerCase().includes(kw) ||
+      (p.renderedTitle || '').toLowerCase().includes(kw)
+    );
 
   if (results.length === 0) {
     await sendButtons(

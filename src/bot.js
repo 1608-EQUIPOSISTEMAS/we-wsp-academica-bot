@@ -173,20 +173,31 @@ function resolveProgram(text, programOptions) {
     const fullName = p.program_name || '';
     const normFull = normalizeText(fullName);
 
-    // Nivel 1: nombre completo (id llega como texto normalizado completo)
+    // Nivel 1: nombre completo
     // Nivel 2: primeros 24 chars normalizados (truncado simple legacy)
     const normTitle = normFull.slice(0, 24);
 
-    // Nivel 3: simulamos nuestro propio _truncateTitle (>24 → slice(0,21)+'...')
-    // para matchear lo que WhatsApp devuelve visualmente al alumno.
+    // Nivel 3: simulamos _buildRowTitle (>24 → slice(0,21)+'...')
     const normTrunc = normalizeText(
       fullName.length > 24 ? fullName.slice(0, 21) + '...' : fullName
     );
 
+    // Nivel 4: abreviatura limpia
+    const normAbbr = normalizeText(p.abbreviation || '');
+
+    // Nivel 5: renderedTitle guardado en session (ya aplicó _buildRowTitle + _cleanVersion)
+    const normRendered = normalizeText(p.renderedTitle || '');
+    const normRenderedTrunc = normRendered.length > 24
+      ? normRendered.slice(0, 21) + '...'
+      : normRendered;
+
     if (
-      normFull  === normText ||
-      normTitle === normText ||
-      normTrunc === normText ||
+      normFull     === normText ||
+      normTitle    === normText ||
+      normTrunc    === normText ||
+      normAbbr     === normText ||
+      normRendered === normText ||
+      normRenderedTrunc === normText ||
       normFull.includes(normText) ||
       normText.includes(normTitle)
     ) {
