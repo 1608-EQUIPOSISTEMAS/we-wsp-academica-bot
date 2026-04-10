@@ -199,7 +199,9 @@ app.post('/webhook/chatwoot', (req, res) => {
 
       console.log(`[webhook] conversation_status_changed | status=${status} | current=${currSt} | previous=${prevSt} | id=${payload.id}`);
 
-      if (status !== 'resolved' || currSt !== 'resolved' || prevSt !== 'open') {
+      // Aceptar cierre desde 'open' (post-transfer) Y desde 'pending' (asesor resuelve sin transferir).
+      const validPrev = prevSt === 'open' || prevSt === 'pending';
+      if (status !== 'resolved' || currSt !== 'resolved' || !validPrev) {
         console.log(`[webhook] conversation_status_changed ignorado (no es cierre real)`);
         return;
       }

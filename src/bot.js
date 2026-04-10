@@ -162,14 +162,31 @@ const NORM_CONTRASENA = normalizeText('🔑 Clave / Acceso');
  */
 function resolveProgram(text, programOptions) {
   if (!programOptions?.length || !text) return null;
-  const normText = normalizeText(text);
+
+  // WhatsApp envía "Título\nDescripción" cuando el alumno selecciona de una lista.
+  // Nos quedamos solo con la primera línea (el título) para comparar.
+  const firstLine = text.split('\n')[0].trim();
+  const normText  = normalizeText(firstLine);
+
   for (let i = 0; i < programOptions.length; i++) {
-    const p         = programOptions[i];
-    const normFull  = normalizeText(p.program_name || '');
-    const normTitle = normFull.slice(0, 24); // WhatsApp trunca a 24 chars en la lista
+    const p        = programOptions[i];
+    const fullName = p.program_name || '';
+    const normFull = normalizeText(fullName);
+
+    // Nivel 1: nombre completo (id llega como texto normalizado completo)
+    // Nivel 2: primeros 24 chars normalizados (truncado simple legacy)
+    const normTitle = normFull.slice(0, 24);
+
+    // Nivel 3: simulamos nuestro propio _truncateTitle (>24 → slice(0,21)+'...')
+    // para matchear lo que WhatsApp devuelve visualmente al alumno.
+    const normTrunc = normalizeText(
+      fullName.length > 24 ? fullName.slice(0, 21) + '...' : fullName
+    );
+
     if (
       normFull  === normText ||
       normTitle === normText ||
+      normTrunc === normText ||
       normFull.includes(normText) ||
       normText.includes(normTitle)
     ) {

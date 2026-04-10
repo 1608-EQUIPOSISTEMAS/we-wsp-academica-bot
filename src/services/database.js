@@ -196,11 +196,11 @@ async function checkAndUpdateMembership(email) {
   const { rows } = await pool.query(
     `SELECT tier_name
      FROM (
-       SELECT 'WE GOLD' AS tier_name, "CORREO" AS email, "F_REN"::timestamp AS fecha_vencimiento FROM gold
+       SELECT 'WE GOLD' AS tier_name, "CORREO" AS email, TO_TIMESTAMP("F_REN", 'DD/MM/YYYY') AS fecha_vencimiento FROM gold
        UNION ALL
-       SELECT 'WE PLAT' AS tier_name, "CORREO" AS email, "F_REN"::timestamp AS fecha_vencimiento FROM plata
+       SELECT 'WE PLAT' AS tier_name, "CORREO" AS email, TO_TIMESTAMP("F_REN", 'DD/MM/YYYY') AS fecha_vencimiento FROM plata
        UNION ALL
-       SELECT 'WE BLACK' AS tier_name, "CORREO" AS email, "F_REN"::timestamp AS fecha_vencimiento FROM black
+       SELECT 'WE BLACK' AS tier_name, "CORREO" AS email, TO_TIMESTAMP("F_REN", 'DD/MM/YYYY') AS fecha_vencimiento FROM black
      ) AS temp_members
      WHERE LOWER(email) = LOWER($1)
        AND CURRENT_TIMESTAMP <= fecha_vencimiento
@@ -299,8 +299,10 @@ async function findProgramEditionByOdoo(baseName, startDate) {
 }
 
 /**
- * Retorna los programas EN_VIVO activos del alumno con los links de acceso a clases.
- * Solo devuelve registros que ya tienen program_edition_id vinculado (post-sync Odoo).
+ * Retorna los programas EN_VIVO activos del alumno para el menú de cronograma.
+ * Solo devuelve registros con program_edition_id vinculado (post-sync Odoo).
+ * Oculta los módulos hijos cuando el alumno también está inscrito en el diplomado
+ * padre, para que el menú muestre solo el padre (entrada única tipo "Todo en Uno").
  */
 async function getStudentCronograma(studentId) {
   const { rows } = await pool.query(
@@ -319,8 +321,47 @@ async function getStudentCronograma(studentId) {
        AND sp.modality             = 'EN_VIVO'
        AND sp.program_edition_id  IS NOT NULL
        AND pe.active              = 'Y'
+       -- Ocultar hijos si el alumno también está inscrito en el padre
+       AND NOT EXISTS (
+         SELECT 1
+         FROM edition_structure    es
+         JOIN ods_student_programs osp_parent
+           ON es.parent_edition_id = osp_parent.program_edition_id
+         WHERE es.child_edition_id  = sp.program_edition_id
+           AND osp_parent.student_id = sp.student_id
+       )
      ORDER BY pe.start_date ASC`,
     [studentId]
+  );
+  return rows;
+}
+
+/**
+ * Retorna los módulos (hijos) de un diplomado en los que el alumno está inscrito.
+ * Usado en el flujo cronograma para construir el mensaje "Todo en Uno" del diplomado.
+ *
+ * @param {number} studentId       — ID del alumno en ods_student_bot
+ * @param {number} parentEditionId — edition_num_id del diplomado padre
+ */
+async function getProgramModules(studentId, parentEditionId) {
+  const { rows } = await pool.query(
+    `SELECT
+       sp.program_edition_id,
+       p.program_name,
+       pe.start_date,
+       pe.end_date,
+       pe.whatsapp_link,
+       pe.teams_link
+     FROM edition_structure       es
+     JOIN ods_student_programs    sp  ON sp.program_edition_id = es.child_edition_id
+     JOIN program_editions        pe  ON pe.edition_num_id     = sp.program_edition_id
+     JOIN program_versions        pv  ON pv.program_version_id = pe.program_version_id
+     JOIN programs                p   ON p.program_id          = pv.program_id
+     WHERE es.parent_edition_id  = $1
+       AND sp.student_id         = $2
+       AND pe.active             = 'Y'
+     ORDER BY pe.start_date ASC`,
+    [parentEditionId, studentId]
   );
   return rows;
 }
@@ -414,6 +455,7 @@ module.exports = {
   findProgramEditionByOdoo,
   findProgramVersionByAbbreviation,
   getStudentCronograma,
+  getProgramModules,
   runMigration,
   testConnection,
   pool,

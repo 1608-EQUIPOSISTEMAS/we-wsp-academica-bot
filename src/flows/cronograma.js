@@ -3,7 +3,8 @@ const { updateSession }                   = require('../services/session');
 const { tagFlow }                         = require('../services/chatwoot');
 const { runTransfer }                     = require('./transfer');
 const { showBotResuelto }                 = require('./resuelto');
-const { getStudentCronograma }            = require('../services/database');
+const { getStudentCronograma,
+        getProgramModules }               = require('../services/database');
 
 const MESES_ES = [
   'Enero','Febrero','Marzo','Abril','Mayo','Junio',
@@ -95,6 +96,21 @@ async function handleCronograma(phone, session) {
   );
 }
 
+// ── Helpers de mensaje ────────────────────────────────────────────────────────
+
+/** Construye la línea de links según los que estén disponibles. */
+function _buildLinks(program) {
+  const parts = [];
+  if (program.whatsapp_link) parts.push(`💬 WhatsApp: ${program.whatsapp_link}`);
+  if (program.teams_link)    parts.push(`🖥️ Teams: ${program.teams_link}`);
+  return parts.join(' | ');
+}
+
+/** Alterna entre 📘 y 📗 por índice para diferenciar módulos visualmente. */
+function _moduleIcon(index) {
+  return index % 2 === 0 ? '📘' : '📗';
+}
+
 // ── Selección del alumno ──────────────────────────────────────────────────────
 
 async function handleCronogramaReply(phone, id, session) {
@@ -107,10 +123,42 @@ async function handleCronogramaReply(phone, id, session) {
     return handleCronograma(phone, session);
   }
 
+  // ── Verificar si es un Diplomado con módulos hijos ────────────────────────
+  let modules = [];
+  try {
+    modules = await getProgramModules(session.studentId, editionId);
+  } catch (err) {
+    console.error('[cronograma] Error consultando módulos:', err.message);
+    // No bloquear — si falla, tratar como curso suelto
+  }
+
+  // ── DIPLOMADO: tiene módulos → mensaje "Todo en Uno" ─────────────────────
+  if (modules.length > 0) {
+    let msg = `🎓 *${program.program_name}*\n`;
+    msg += `Aquí tienes los accesos para tus módulos:\n`;
+
+    for (const [i, mod] of modules.entries()) {
+      const links = _buildLinks(mod);
+      msg += `\n${_moduleIcon(i)} *${mod.program_name}*`;
+      if (mod.start_date) msg += ` (Inicio: ${_formatDate(mod.start_date)})`;
+      msg += `\n`;
+      if (links) {
+        msg += `🔗 ${links}\n`;
+      } else {
+        msg += `⏳ Accesos aún no publicados\n`;
+      }
+    }
+
+    await sendText(phone, msg.trim());
+    updateSession(phone, { estado: 'resuelto_bot', resuelto_bot_at: Date.now() });
+    await showBotResuelto(phone);
+    return;
+  }
+
+  // ── CURSO SUELTO: sin módulos → mensaje estándar ──────────────────────────
   const hasWhatsapp = !!program.whatsapp_link;
   const hasTeams    = !!program.teams_link;
 
-  // Sin accesos publicados aún → transferir al asesor
   if (!hasWhatsapp && !hasTeams) {
     await sendText(
       phone,
@@ -121,7 +169,6 @@ async function handleCronogramaReply(phone, id, session) {
     return runTransfer(phone, { ...session, ultimoTema: 'cronograma' });
   }
 
-  // Construir mensaje con fecha(s) y links
   let msg = `📅 *${program.program_name}*\n`;
   if (program.start_date) msg += `🗓 Inicio: ${_formatDate(program.start_date)}\n`;
   if (program.end_date)   msg += `🏁 Fin: ${_formatDate(program.end_date)}\n`;
@@ -130,7 +177,6 @@ async function handleCronogramaReply(phone, id, session) {
   if (hasTeams)    msg += `🖥️ Teams: ${program.teams_link}\n`;
 
   await sendText(phone, msg.trim());
-
   updateSession(phone, { estado: 'resuelto_bot', resuelto_bot_at: Date.now() });
   await showBotResuelto(phone);
 }
