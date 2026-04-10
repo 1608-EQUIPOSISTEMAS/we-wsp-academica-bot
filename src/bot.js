@@ -490,16 +490,26 @@ async function route(phone, session, { text, buttonId, listId }) {
     case 'flow_cronograma': {
       if (id?.startsWith('crono_')) return handleCronogramaReply(phone, id, session);
 
-      // Chatwoot a veces envía el título de la fila como texto plano en lugar del id.
-      // Buscar en cronogramaOptions por nombre completo y por primeros 24 chars (límite visual WA).
+      // Chatwoot envía el título renderizado como texto plano (a veces con "\nDescripción").
+      // Comparar contra: program_name, abbreviation, y el renderedTitle exacto del menú
+      // (ya limpio de versiones V1-V7 y con la lógica abbreviation/name aplicada).
       if (text) {
-        const normInput = normalizeText(text);
+        const normInput = normalizeText(text.split('\n')[0].trim());
         const options   = session.cronogramaOptions || [];
         const match     = options.find(p => {
-          const normFull  = normalizeText(p.program_name || '');
-          const normTitle = normFull.slice(0, 24);
-          return normFull === normInput || normTitle === normInput
-              || normFull.includes(normInput) || normInput.includes(normTitle);
+          const normName     = normalizeText(p.program_name  || '');
+          const normAbbr     = normalizeText(p.abbreviation  || '');
+          const normRendered = normalizeText(p.renderedTitle || '');
+          // Simular el truncado de _buildRowTitle (>24 → 21+'...')
+          const normTrunc    = normRendered.length > 24
+            ? normRendered.slice(0, 21) + '...'
+            : normRendered;
+          return normName     === normInput ||
+                 normAbbr     === normInput ||
+                 normRendered === normInput ||
+                 normTrunc    === normInput ||
+                 normName.includes(normInput) ||
+                 normInput.includes(normRendered.slice(0, 24));
         });
 
         if (match) {

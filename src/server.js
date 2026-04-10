@@ -199,10 +199,15 @@ app.post('/webhook/chatwoot', (req, res) => {
 
       console.log(`[webhook] conversation_status_changed | status=${status} | current=${currSt} | previous=${prevSt} | id=${payload.id}`);
 
-      // Aceptar cierre desde 'open' (post-transfer) Y desde 'pending' (asesor resuelve sin transferir).
-      const validPrev = prevSt === 'open' || prevSt === 'pending';
-      if (status !== 'resolved' || currSt !== 'resolved' || !validPrev) {
-        console.log(`[webhook] conversation_status_changed ignorado (no es cierre real)`);
+      // Aceptar si status === 'resolved'. Chatwoot a veces envía currSt/prevSt como
+      // undefined en ciertos escenarios de cierre, por lo que no se exige su presencia.
+      // Si currSt está definido y NO es 'resolved', descartamos (evento de otro tipo).
+      if (status !== 'resolved') {
+        console.log(`[webhook] conversation_status_changed ignorado (status=${status})`);
+        return;
+      }
+      if (currSt !== undefined && currSt !== 'resolved') {
+        console.log(`[webhook] conversation_status_changed ignorado (currSt=${currSt})`);
         return;
       }
 

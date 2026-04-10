@@ -309,6 +309,7 @@ async function getStudentCronograma(studentId) {
     `SELECT
        sp.program_edition_id,
        p.program_name,
+       pv.abbreviation,
        pe.start_date,
        pe.end_date,
        pe.whatsapp_link,
@@ -321,6 +322,7 @@ async function getStudentCronograma(studentId) {
        AND sp.modality             = 'EN_VIVO'
        AND sp.program_edition_id  IS NOT NULL
        AND pe.active              = 'Y'
+       AND (pe.start_date >= CURRENT_DATE - INTERVAL '3 months' OR pe.end_date >= CURRENT_DATE)
        -- Ocultar hijos si el alumno también está inscrito en el padre
        AND NOT EXISTS (
          SELECT 1
@@ -337,31 +339,28 @@ async function getStudentCronograma(studentId) {
 }
 
 /**
- * Retorna los módulos (hijos) de un diplomado en los que el alumno está inscrito.
- * Usado en el flujo cronograma para construir el mensaje "Todo en Uno" del diplomado.
+ * Retorna los módulos hijos de un diplomado directamente desde edition_structure.
+ * Consulta estricta por parentEditionId — sin filtrar por alumno para garantizar
+ * 0% de margen de error en la vinculación.
  *
- * @param {number} studentId       — ID del alumno en ods_student_bot
  * @param {number} parentEditionId — edition_num_id del diplomado padre
  */
-async function getProgramModules(studentId, parentEditionId) {
+async function getProgramModules(parentEditionId) {
   const { rows } = await pool.query(
     `SELECT
-       sp.program_edition_id,
+       pe.edition_num_id,
+       pv.abbreviation,
        p.program_name,
        pe.start_date,
-       pe.end_date,
        pe.whatsapp_link,
        pe.teams_link
-     FROM edition_structure       es
-     JOIN ods_student_programs    sp  ON sp.program_edition_id = es.child_edition_id
-     JOIN program_editions        pe  ON pe.edition_num_id     = sp.program_edition_id
-     JOIN program_versions        pv  ON pv.program_version_id = pe.program_version_id
-     JOIN programs                p   ON p.program_id          = pv.program_id
-     WHERE es.parent_edition_id  = $1
-       AND sp.student_id         = $2
-       AND pe.active             = 'Y'
+     FROM edition_structure es
+     JOIN program_editions  pe ON es.child_edition_id   = pe.edition_num_id
+     JOIN program_versions  pv ON pe.program_version_id = pv.program_version_id
+     JOIN programs          p  ON pv.program_id         = p.program_id
+     WHERE es.parent_edition_id = $1
      ORDER BY pe.start_date ASC`,
-    [parentEditionId, studentId]
+    [parentEditionId]
   );
   return rows;
 }

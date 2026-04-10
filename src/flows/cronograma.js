@@ -11,6 +11,10 @@ const MESES_ES = [
   'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre',
 ];
 
+const DIAS_ES = [
+  'Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado',
+];
+
 function _formatDate(date) {
   if (!date) return null;
   const d     = new Date(date);
@@ -18,6 +22,43 @@ function _formatDate(date) {
   const month = MESES_ES[d.getUTCMonth()];
   const year  = d.getUTCFullYear();
   return `${day} de ${month} de ${year}`;
+}
+
+/** Elimina sufijos de versión interna (V1–V7) del texto. */
+const _cleanVersion = (text) => text ? text.replace(/\s*V[1-7]\b/gi, '').trim() : '';
+
+/**
+ * Título de la fila: usa abbreviation si el nombre completo supera 20 chars,
+ * truncando a 24 como seguridad final ante el límite de WhatsApp.
+ * Ambos strings pasan por _cleanVersion antes de evaluarse.
+ */
+function _buildRowTitle(p) {
+  const name = _cleanVersion(p.program_name || 'Programa');
+  const abbr = _cleanVersion(p.abbreviation || '');
+  const base = (name.length > 20 && abbr) ? abbr : name;
+  return base.length > 24 ? base.slice(0, 21) + '...' : base;
+}
+
+/** Deduce el tipo de programa a partir del nombre. */
+function _deduceTipo(name) {
+  const n = (name || '').toLowerCase();
+  if (n.includes('diplomado'))      return 'Diplomado';
+  if (n.includes('especializaci'))  return 'Especialización';
+  if (n.includes('pee'))            return 'PEE';
+  return 'Curso';
+}
+
+/**
+ * Descripción de la fila: "09 Martes | Diplomado"
+ * Si no hay fecha, devuelve solo el tipo.
+ */
+function _buildRowDescription(p) {
+  const tipo = _deduceTipo(p.program_name);
+  if (!p.start_date) return tipo;
+  const d         = new Date(p.start_date);
+  const numeroDia = String(d.getUTCDate()).padStart(2, '0');
+  const nombreDia = DIAS_ES[d.getUTCDay()];
+  return `${numeroDia} ${nombreDia} | ${tipo}`;
 }
 
 /** Agrupa los programas por mes (clave "Mes Año") y genera las sections para sendList. */
@@ -40,8 +81,8 @@ function _buildSections(programs) {
       title: month,
       rows:  progs.slice(0, 10).map(p => ({
         id:          `crono_${p.program_edition_id}`,
-        title:       (p.program_name || 'Programa').slice(0, 24),
-        description: p.start_date ? _formatDate(p.start_date) : '',
+        title:       _buildRowTitle(p),
+        description: _buildRowDescription(p),
       })),
     });
   }
@@ -81,7 +122,9 @@ async function handleCronograma(phone, session) {
 
   updateSession(phone, {
     estado:            'flow_cronograma',
-    cronogramaOptions: programs,
+    // Enriquecer cada programa con el título exacto renderizado en el menú,
+    // para que bot.js pueda hacer match cuando WhatsApp devuelve ese texto.
+    cronogramaOptions: programs.map(p => ({ ...p, renderedTitle: _buildRowTitle(p) })),
   });
 
   const sections = _buildSections(programs);
@@ -126,7 +169,7 @@ async function handleCronogramaReply(phone, id, session) {
   // ── Verificar si es un Diplomado con módulos hijos ────────────────────────
   let modules = [];
   try {
-    modules = await getProgramModules(session.studentId, editionId);
+    modules = await getProgramModules(editionId);
   } catch (err) {
     console.error('[cronograma] Error consultando módulos:', err.message);
     // No bloquear — si falla, tratar como curso suelto
@@ -139,7 +182,7 @@ async function handleCronogramaReply(phone, id, session) {
 
     for (const [i, mod] of modules.entries()) {
       const links = _buildLinks(mod);
-      msg += `\n${_moduleIcon(i)} *${mod.program_name}*`;
+      msg += `\n${_moduleIcon(i)} *${_cleanVersion(mod.program_name)}*`;
       if (mod.start_date) msg += ` (Inicio: ${_formatDate(mod.start_date)})`;
       msg += `\n`;
       if (links) {
