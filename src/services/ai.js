@@ -18,11 +18,9 @@ IDs disponibles:
 - justificaciones: justificar inasistencia o tardanza
 - alumno_flex: solicitar modalidad flex
 - instaladores: problemas con SAP, Office o software
-- grupo_whatsapp: solicitar link del grupo de WhatsApp
 - examenes_int: exámenes internacionales MOS, PMI u otros
 - cronograma: fechas, horarios o calendario del programa
 - inscripcion: inscribirse a un nuevo programa o curso
-- funciones_docente: herramientas o funciones del docente
 - hablar_asesor: quiere hablar con una persona humana
 - DESCONOCIDO: no se puede clasificar con certeza
 

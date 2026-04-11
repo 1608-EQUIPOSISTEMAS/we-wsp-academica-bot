@@ -10,7 +10,8 @@
  * del mensaje interactivo al alumno.
  */
 
-const axios = require('axios');
+const axios    = require('axios');
+const FormData = require('form-data');
 
 const { getSession }               = require('./session');
 const { postMessage, addPrivateNote } = require('./chatwoot');
@@ -207,6 +208,78 @@ async function sendList(phone, header, body, footer, buttonLabel, sections) {
     .catch(err => console.error('[whatsapp] Error en nota privada:', err));
 }
 
+// ── Envío de documentos PDF ───────────────────────────────────────────────────
+
+/**
+ * Sube un PDF en base64 a la Media API de Meta y retorna el media_id.
+ * @param {string} base64String — contenido del PDF en base64
+ * @param {string} filename     — nombre del archivo (ej: 'Certificado.pdf')
+ * @returns {string} media_id
+ */
+async function _uploadMedia(base64String, filename) {
+  const buffer = Buffer.from(base64String, 'base64');
+  const form   = new FormData();
+  form.append('messaging_product', 'whatsapp');
+  form.append('file', buffer, { filename, contentType: 'application/pdf' });
+
+  const url = `${META_BASE}/${process.env.WHATSAPP_PHONE_ID}/media`;
+  const { data } = await axios.post(url, form, {
+    headers: {
+      Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
+      ...form.getHeaders(),
+    },
+  });
+
+  if (!data?.id) throw new Error(`Meta Media API no retornó id: ${JSON.stringify(data)}`);
+  return data.id;
+}
+
+/**
+ * Envía un documento ya subido (por media_id) al número destino.
+ * @param {string} phone    — número sin '+'
+ * @param {string} mediaId  — id obtenido de _uploadMedia
+ * @param {string} filename — nombre que verá el alumno al descargar
+ * @param {string} caption  — texto que acompaña al documento
+ */
+async function _sendMediaId(phone, mediaId, filename, caption) {
+  await metaSend({
+    messaging_product: 'whatsapp',
+    to:   phone,
+    type: 'document',
+    document: {
+      id:       mediaId,
+      filename,
+      caption,
+    },
+  });
+}
+
+/**
+ * Orquesta la subida y el envío de un PDF en base64 por WhatsApp.
+ * Añade nota privada en Chatwoot para visibilidad del asesor.
+ *
+ * @param {string} phone         — número del alumno sin '+'
+ * @param {string} base64String  — PDF en base64
+ * @param {string} filename      — nombre del archivo (ej: 'Certificado.pdf')
+ * @param {string} caption       — mensaje que acompaña al PDF
+ */
+async function sendBase64Pdf(phone, base64String, filename, caption) {
+  try {
+    const mediaId = await _uploadMedia(base64String, filename);
+    await _sendMediaId(phone, mediaId, filename, caption);
+
+    const session = getSession(phone);
+    if (session?.conversationId) {
+      addPrivateNote(session.conversationId, `🤖 Bot envió PDF: ${filename}\n${caption}`)
+        .catch(err => console.error('[whatsapp] Error nota privada sendBase64Pdf:', err));
+    }
+  } catch (err) {
+    const detail = err.response?.data || err.message;
+    console.error('[whatsapp] Error enviando PDF:', JSON.stringify(detail));
+    throw err;
+  }
+}
+
 async function sendCtaUrl(phone, bodyText, displayText, url) {
   // 1. Mensaje interactivo CTA via Meta API
   await metaSend({
@@ -228,4 +301,4 @@ async function sendCtaUrl(phone, bodyText, displayText, url) {
     .catch(err => console.error('[whatsapp] Error en nota privada CTA:', err));
 }
 
-module.exports = { sendText, sendTextDirect, sendButtons, sendButtonsWithHeader, sendList, sendCtaUrl };
+module.exports = { sendText, sendTextDirect, sendButtons, sendButtonsWithHeader, sendList, sendCtaUrl, sendBase64Pdf };

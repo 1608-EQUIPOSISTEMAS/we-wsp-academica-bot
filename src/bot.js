@@ -7,7 +7,7 @@ const { sendText, sendTextDirect, sendButtons, sendList } = require('./services/
 const { buildProgramRows, PAGE_SIZE }     = require('./utils/programList');
 const { detectIntent }            = require('./services/ai');
 const { runTransfer }             = require('./flows/transfer');
-const { showMenu, handleMenuPrincipalReply } = require('./flows/menu');
+const { showMenu, showMenuPagos, handleMenuPrincipalReply } = require('./flows/menu');
 const {
   startIdentificacion,
   handleCorreo,
@@ -39,21 +39,19 @@ function markProcessed(msgId) {
 const TEXT_TO_ID = {
   // ── Menú principal ──────────────────────────────────────────────────────
   '📚 Académico':                          'menu_academico',
-  '🛠️ Soporte':                            'menu_soporte',
+  '💳 Pagos':                              'menu_pagos',
   '💬 Con un asesor':                      'hablar_asesor',
   // ── Submenú Académico y Gestión ─────────────────────────────────────────
-  '🎬 Video Clases':                       'video_clases',
-  '📁 Materiales':                         'materiales',
+  '🖥️ Campus y Materiales':               'materiales',
   '📅 Cronograma':                         'cronograma',
   '📝 Exámenes Int.':                      'examenes_int',
-  '🖥️ Campus Virtual':                     'campus_virtual',
   '🏅 Certificación':                      'certificacion',
   '📄 Justificaciones':                    'justificaciones',
   '⚡ Alumno Flex':                        'alumno_flex',
-  // ── Submenú Soporte Técnico ─────────────────────────────────────────────
   '💻 Instaladores':                       'instaladores',
-  '💬 Grupo WhatsApp':                     'grupo_whatsapp',
-  '👨‍🏫 Func. Docente':                   'funciones_docente',
+  // ── Submenú Pagos y Facturación ─────────────────────────────────────────
+  '📊 Estado de Cuenta':                   'estado_cuenta',
+  '🧾 Enviar Comprobante':                 'enviar_comprobante',
   '💬 Hablar con asesor':                  'hablar_asesor',
   // ── Común (ambos submenús) ──────────────────────────────────────────────
   '🔙 Menú principal':                     'menu_principal',
@@ -353,10 +351,15 @@ async function route(phone, session, { text, buttonId, listId }) {
         const rating = parseInt(id.split('_')[1], 10);
         return handleCsatReply(phone, rating, session);
       }
-      // Texto libre: aceptar dígito 1-5 directamente
+      // Texto libre: aceptar dígito 1-5 directamente; resto → nudge
       if (text) {
         const n = parseInt(text.trim(), 10);
         if (n >= 1 && n <= 5) return handleCsatReply(phone, n, session);
+        await sendText(
+          phone,
+          `Para ayudarnos a mejorar, por favor selecciona una calificación de la lista desplegable que te envié arriba 👇`
+        );
+        return;
       }
       return; // ignorar cualquier otra respuesta
     }
@@ -367,6 +370,15 @@ async function route(phone, session, { text, buttonId, listId }) {
 
     case 'correo_no_encontrado':
       if (id) return handleCorreoNoEncontrado(phone, id, session);
+      if (text) {
+        // Si parece un correo, procesarlo directamente como reintento
+        if (text.includes('@')) return handleCorreo(phone, text, session);
+        // Texto sin '@' → recordarle que debe ingresar su correo o usar los botones
+        await sendText(phone,
+          `Para reintentar, escribe tu correo de inscripción 📧\n` +
+          `O selecciona una opción del menú.`
+        );
+      }
       return;
 
     // ── Menú de dos niveles ────────────────────────────────────────────────
@@ -377,8 +389,11 @@ async function route(phone, session, { text, buttonId, listId }) {
 
     // ── ¿Algo más? — confirmación de cierre bot ────────────────────────────
     case 'resuelto_bot':
-      if (id)   return handleBotResuelto(phone, id, session);
-      if (text) return handleBotResuelto(phone, 'bot_resuelto_menu', session);
+      if (id) return handleBotResuelto(phone, id, session);
+      if (text) {
+        await sendText(phone, `Por favor, selecciona una opción del menú de arriba para continuar 😊`);
+        return showBotResuelto(phone);
+      }
       return;
 
     // ── Campus Virtual ─────────────────────────────────────────────────────
@@ -394,15 +409,91 @@ async function route(phone, session, { text, buttonId, listId }) {
 
     // ── Certificación — Rama B: selección de programa ─────────────────────
     case 'flow_cert_programa': {
+      // IDs interactivos: cert_odoo_*, cert_tipo_avanzado, cert_prog_*, cert_buscar, etc.
       if (id) return handleCertReply(phone, id, session);
+
       if (text) {
         // Chatwoot a veces envía el título de la fila en lugar del id.
-        // Detectar la opción de búsqueda por su texto antes de intentar resolveProgram.
-        if (normalizeText(text).includes('buscar')) {
+        const normInput = normalizeText(text.split('\n')[0].trim());
+
+        // Detectar opción de búsqueda por texto
+        if (normInput.includes('buscar')) {
           return handleCertReply(phone, 'cert_buscar', session);
         }
+
+        // ── Rama B Odoo: buscar en certOptions ────────────────────────────
+        const certOptions = session.certOptions || [];
+        if (certOptions.length > 0) {
+          const certMatch = certOptions.find(c => {
+            const normFull  = normalizeText(c.courseName || '');
+            const normShort = normalizeText(
+              (c.courseName || '').length > 24
+                ? (c.courseName || '').slice(0, 21) + '...'
+                : (c.courseName || '')
+            );
+            return normFull === normInput || normShort === normInput ||
+                   normFull.includes(normInput) || normInput.includes(normFull.slice(0, 10));
+          });
+          if (certMatch) return handleCertReply(phone, `cert_odoo_${certMatch.id}`, session);
+
+          // Texto que describe la fila estática final (Diplomados/PEE)
+          if (normInput.includes('diplomado') || normInput.includes('avanzado') ||
+              normInput.includes('pee') || normInput.includes('especiali')) {
+            return handleCertReply(phone, 'cert_tipo_avanzado', session);
+          }
+
+          await sendText(phone,
+            `No reconocí esa opción 😊\nPor favor selecciona una de la lista.`
+          );
+          return;
+        }
+
+        // ── Rama B avanzada: buscar en certAvanzadoOptions ────────────────
+        const certAvanzadoOptions = session.certAvanzadoOptions || [];
+        if (certAvanzadoOptions.length > 0) {
+          const avMatch = certAvanzadoOptions.findIndex(p => {
+            const fullName     = p.program_name || '';
+            const normFull     = normalizeText(fullName);
+            const normAbbr     = normalizeText(p.abbreviation || '');
+            const normRend     = normalizeText(p.renderedTitle || '');
+            // Nivel: primeros 24 chars del nombre completo
+            const normTitle    = normFull.slice(0, 24);
+            // Nivel: simulación de _buildRowTitle (>24 → 21+'...')
+            const normTrunc    = normalizeText(
+              fullName.length > 24 ? fullName.slice(0, 21) + '...' : fullName
+            );
+            // Nivel: renderedTitle ya truncado a 24 por _buildRowTitle
+            const normRendTrunc = normalizeText(
+              (p.renderedTitle || '').length > 24
+                ? (p.renderedTitle || '').slice(0, 21) + '...'
+                : (p.renderedTitle || '')
+            );
+            return normFull      === normInput ||
+                   normAbbr      === normInput ||
+                   normRend      === normInput ||
+                   normTitle     === normInput ||
+                   normTrunc     === normInput ||
+                   normRendTrunc === normInput ||
+                   normFull.includes(normInput) ||
+                   normInput.includes(normTitle);
+          });
+          if (avMatch >= 0) return handleCertReply(phone, `cert_avanzado_${avMatch}`, session);
+
+          if (normInput.includes('otro') || normInput.includes('no aparece') ||
+              normInput.includes('antiguo')) {
+            return handleCertReply(phone, 'cert_avanzado_otro', session);
+          }
+
+          await sendText(phone,
+            `No reconocí esa opción 😊\nPor favor selecciona una de la lista.`
+          );
+          return;
+        }
+
+        // ── Rama B DB (fallback sin odooPartnerId): buscar en programOptions ──
         const match = resolveProgram(text, session.programOptions);
         if (match) return handleCertReply(phone, `cert_prog_${match.index}`, session);
+
         await sendText(phone,
           `No reconocí esa opción 😊\nPor favor selecciona una de las opciones de la lista.`
         );
@@ -440,10 +531,6 @@ async function route(phone, session, { text, buttonId, listId }) {
     // ── Reclamo / Grupo — esperan texto libre del alumno ──────────────────
     case 'flow_reclamo_datos':
       if (text) return handleReclamoDatos(phone, text, session);
-      return;
-
-    case 'flow_grupo_datos':
-      if (text) return runTransfer(phone, { ...session, ultimoTema: 'grupo_whatsapp' }, text);
       return;
 
     // ── Alumno Flex — Rama B: selección de programa ───────────────────────
@@ -588,22 +675,39 @@ async function handleMenuOption(phone, optionId, session) {
     case 'campus_virtual':    return showCampus(phone, session);
     case 'certificacion':     return showCertificados(phone, session);
     case 'justificaciones':   return showJustificaciones(phone, session);
-    case 'materiales':
-    case 'video_clases':      return showMateriales(phone, optionId);
+    case 'materiales':        return showMateriales(phone, optionId);
     case 'instaladores':      return showInstaladores(phone);
     case 'alumno_flex':       return showAlumnoFlex(phone, session);
     case 'inscripcion':       return showInscripcion(phone, session);
     case 'examenes_int':      return showExamenes(phone);
 
-    case 'grupo_whatsapp':
-      updateSession(phone, { estado: 'flow_grupo_datos' });
+    case 'menu_pagos':
+      return showMenuPagos(phone);
+
+    // ── Pagos — candado inteligente ─────────────────────────────────────────
+    case 'estado_cuenta':
+    case 'enviar_comprobante': {
+      const tramite = optionId === 'estado_cuenta' ? 'Estado de Cuenta' : 'Envío de Comprobante';
+      if (session.verified === true) {
+        await sendText(phone,
+          `Módulo financiero en construcción 🚧\nPronto podrás gestionar tu *${tramite}* directamente desde aquí.`
+        );
+        return showMenuPagos(phone);
+      }
+      // Celular no coincide → alerta + transfer con contexto
+      if (session.conversationId) {
+        addPrivateNote(
+          session.conversationId,
+          `📋 *Alerta de Seguridad:* El usuario solicita *${tramite}*, pero el número de WhatsApp no coincide con la base de datos.\n_(Requiere validación de identidad)_`
+        ).catch(err => console.error('[bot] Error nota privada pagos:', err));
+      }
       await sendText(phone,
-        `Para enviarte el enlace a tu grupo de WhatsApp, ¿puedes indicarnos el nombre de tu programa y edición? 💬`
+        `Para proteger tu privacidad financiera y procesar tu solicitud de *${tramite}*, un asesor validará tu identidad brevemente 🔒`
       );
-      return;
+      return runTransfer(phone, { ...session, ultimoTema: 'pagos' });
+    }
 
     case 'hablar_asesor':
-    case 'funciones_docente':
       return runTransfer(phone, session);
 
     case 'cronograma':
@@ -714,7 +818,7 @@ async function showFallbackMenu(phone) {
     `No entendí bien tu mensaje 😊\n¿En qué podemos ayudarte?`,
     [
       { id: 'menu_academico', title: '📚 Académico' },
-      { id: 'menu_soporte',   title: '🛠️ Soporte' },
+      { id: 'menu_pagos',     title: '💳 Pagos' },
       { id: 'hablar_asesor',  title: '💬 Con un asesor' },
     ]
   );

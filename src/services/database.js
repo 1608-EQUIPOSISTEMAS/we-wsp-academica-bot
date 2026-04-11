@@ -17,7 +17,7 @@ pool.on('error', (err) => {
 
 async function findAlumnoByEmail(email) {
   const query = `
-    SELECT id, full_name, email, phone, is_active, flag_odoo_validation
+    SELECT id, full_name, email, phone, is_active, flag_odoo_validation, odoo_partner_id
     FROM ods_student_bot
     WHERE LOWER(email) = LOWER($1) AND is_active = true
   `;
@@ -406,6 +406,8 @@ async function runMigration() {
     ALTER TABLE ods_student_programs ADD COLUMN IF NOT EXISTS modality           VARCHAR(20) DEFAULT 'ONLINE';
     ALTER TABLE ods_student_programs ADD COLUMN IF NOT EXISTS certificate_status VARCHAR(20) DEFAULT 'PENDIENTE';
     ALTER TABLE ods_student_programs ADD COLUMN IF NOT EXISTS certificate_url    TEXT;
+
+    ALTER TABLE ods_student_bot ADD COLUMN IF NOT EXISTS odoo_partner_id INTEGER;
 
     CREATE SEQUENCE IF NOT EXISTS solicitudes_bot_seq START 1 INCREMENT 1;
 

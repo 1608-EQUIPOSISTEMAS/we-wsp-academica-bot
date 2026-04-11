@@ -100,13 +100,14 @@ async function handleCorreo(phone, email, session) {
     }
 
     updateSession(phone, {
-      nombre:        alumno.full_name,
-      correo:        alumno.email,
-      studentId:     alumno.id,
+      nombre:          alumno.full_name,
+      correo:          alumno.email,
+      studentId:       alumno.id,
+      odooPartnerId:   alumno.odoo_partner_id || null,
       verified,
       isMember,
       membershipTier,
-      estado:        'menu',
+      estado:          'menu',
     });
     tagAlumno(phone, alumno.full_name, alumno.email);
     const saludoInicial = (verified && isMember)

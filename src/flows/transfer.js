@@ -1,5 +1,5 @@
 const { sendTextDirect }                                                    = require('../services/whatsapp');
-const { addPrivateNote, deactivateBot, updateLabels, assignTeam, assignAgent, openConversation } = require('../services/chatwoot');
+const { addPrivateNote, deactivateBot, updateLabels, assignTeam, openConversation } = require('../services/chatwoot');
 const { updateSession }                                                     = require('../services/session');
 const { isWithinBusinessHours, getScheduleText }                            = require('../services/schedule');
 const { createSolicitud }                                                   = require('../services/database');
@@ -7,6 +7,7 @@ const { createSolicitud }                                                   = re
 // ── Mapeo tema → equipo ───────────────────────────────────────────────────────
 const TEAM_ACADEMICO = process.env.CHATWOOT_TEAM_ACADEMICO;
 const TEAM_SOPORTE   = process.env.CHATWOOT_TEAM_SOPORTE;
+const TEAM_FINANZAS  = process.env.CHATWOOT_TEAM_FINANZAS;
 const TEAM_GENERAL   = process.env.CHATWOOT_TEAM_GENERAL;
 
 const TOPIC_TEAM = {
@@ -16,7 +17,6 @@ const TOPIC_TEAM = {
   alumno_flex:          TEAM_ACADEMICO,
   cronograma:           TEAM_ACADEMICO,
   examenes_int:         TEAM_ACADEMICO,
-  video_clases:         TEAM_ACADEMICO,
   materiales:           TEAM_ACADEMICO,
   reclamo_certificado:  TEAM_ACADEMICO,
   reclamo_activacion:   TEAM_ACADEMICO,
@@ -25,6 +25,7 @@ const TOPIC_TEAM = {
   soporte_sap:          TEAM_SOPORTE,
   soporte_office:       TEAM_SOPORTE,
   soporte_instaladores: TEAM_SOPORTE,
+  pagos:                TEAM_FINANZAS,
 };
 
 // ── Mapeo tema → tipo de solicitud en DB ─────────────────────────────────────
@@ -36,14 +37,13 @@ const TIPO_MAP = {
   soporte_sap:           'INSTALADOR_SAP',
   soporte_instaladores:  'INSTALADOR_SAP',
   soporte_office:        'INSTALADOR_OFFICE',
-  grupo_whatsapp:        'GRUPO_WHATSAPP',
   justificaciones:       'JUSTIFICACION',
   examenes_int:          'EXAMENES_INT',
   cronograma:            'CRONOGRAMA',
-  funciones_docente:     'FUNCIONES_DOCENTE',
   inscripcion:           'INSCRIPCION',
   alumno_flex:           'SOLICITUD_FLEX',
   hablar_asesor:         'CONSULTA_GENERAL',
+  pagos:                 'CONSULTA_PAGOS',
   'fuera-de-horario':    'FUERA_DE_HORARIO',
   verificacion_fallida:  'VERIFICACION_FALLIDA',
   correo_no_encontrado:  'VERIFICACION_FALLIDA',
@@ -87,7 +87,6 @@ function applyLabelsAndAssign(convId, session, labels) {
   updateLabels(convId, { add: labels });
   const teamId = TOPIC_TEAM[session.ultimoTema] || TEAM_GENERAL;
   assignTeam(convId, teamId);
-  assignAgent(convId, process.env.CHATWOOT_DEFAULT_AGENT_ID);
 }
 
 // ── Transfer principal ────────────────────────────────────────────────────────

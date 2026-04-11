@@ -1,12 +1,15 @@
-const { sendText, sendButtons, sendList } = require('../services/whatsapp');
+const { sendText, sendButtons, sendList,
+        sendBase64Pdf }                  = require('../services/whatsapp');
 const { updateSession }                  = require('../services/session');
-const { tagFlow }                        = require('../services/chatwoot');
+const { tagFlow, addPrivateNote }        = require('../services/chatwoot');
 const { runTransfer }                    = require('./transfer');
 const { showMenu }                       = require('./menu');
 const { askReclamoDatos }                = require('./reclamo');
 const { showBotResuelto }               = require('./resuelto');
 const { getAllStudentPrograms, createSolicitud } = require('../services/database');
 const { isWithinBusinessHours, getScheduleText } = require('../services/schedule');
+const { fetchStudentCertificates,
+        fetchCertificatePdf }            = require('../services/odoo');
 
 // ── Tabla de tiempos (Rama A) ─────────────────────────────────────────────────
 const CERT_INFO = {
@@ -76,6 +79,24 @@ function _buildRowDescription(p) {
   return tipo;
 }
 
+/** Formatea 'YYYY-MM-DD' de Odoo a 'DD/MM/YYYY' legible. */
+function _formatCertDate(dateStr) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  const day   = String(d.getUTCDate()).padStart(2, '0');
+  const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+  return `${day}/${month}/${d.getUTCFullYear()}`;
+}
+
+/**
+ * Construye el título de fila para un certificado de Odoo.
+ * Limpia versiones (V1-V7) y trunca a 24 chars.
+ */
+function _buildCertTitle(courseName) {
+  const clean = _cleanVersion(courseName || 'Certificado');
+  return clean.length > 24 ? clean.slice(0, 21) + '...' : clean;
+}
+
 // ── Entrada principal ─────────────────────────────────────────────────────────
 
 async function showCertificados(phone, session) {
@@ -102,37 +123,76 @@ async function _showCertRamaA(phone) {
   );
 }
 
-// ── Rama B — lista de programas personalizados ────────────────────────────────
+// ── Rama B — certificados reales desde Odoo ───────────────────────────────────
 
 async function _showCertProgramList(phone, session) {
-  let programs;
-  try {
-    programs = await getAllStudentPrograms(session.studentId);
-  } catch (err) {
-    console.error('[certificados] Error consultando programas:', err.message);
-    return _showCertRamaA(phone); // fallback graceful
+  // Sin odooPartnerId no podemos consultar Odoo → flujo genérico
+  if (!session.odooPartnerId) return _showCertRamaA(phone);
+
+  const certs = await fetchStudentCertificates(session.odooPartnerId);
+
+  if (certs.length === 0) {
+    await sendText(
+      phone,
+      `Aún no tienes certificados generados en nuestra plataforma 😊\n\n` +
+      `Si crees que hay un error o necesitas información sobre tu certificado, ` +
+      `un asesor puede ayudarte.`
+    );
+    await sendButtons(
+      phone,
+      '¿Qué deseas hacer?',
+      [
+        { id: 'cert_asesor', title: '💬 Hablar con asesor' },
+        { id: 'volver_menu', title: '🔙 Menú principal' },
+      ]
+    );
+    return;
   }
 
-  if (programs.length === 0) return _showCertRamaA(phone);
+  // Guardar certs en sesión para el handler de selección
+  updateSession(phone, { estado: 'flow_cert_programa', certOptions: certs });
+  await _sendCertOdooList(phone, certs);
+}
 
-  // Ordenar por fecha de inicio descendente (más recientes primero)
-  programs.sort((a, b) => {
-    if (!a.start_date) return 1;
-    if (!b.start_date) return -1;
-    return new Date(b.start_date) - new Date(a.start_date);
+async function _sendCertOdooList(phone, certs) {
+  // Ordenar por fecha desc (más recientes primero) como seguridad extra
+  const sorted = [...certs].sort((a, b) => {
+    if (!a.date) return 1;
+    if (!b.date) return -1;
+    return new Date(b.date) - new Date(a.date);
   });
 
-  // Enriquecer cada programa con el título renderizado (para matching en bot.js)
-  const programsWithTitle = programs.map(p => ({ ...p, renderedTitle: _buildRowTitle(p) }));
+  // Máx 8 certs dinámicos → deja hueco para fila estática + "Buscar" si hay más
+  const rows = sorted.slice(0, 8).map(c => ({
+    id:          `cert_odoo_${c.id}`,
+    title:       _buildCertTitle(c.courseName),
+    description: c.date ? `Emitido: ${_formatCertDate(c.date)}` : 'Fecha no disponible',
+  }));
 
-  // Guardar lista completa en sesión (necesaria para búsqueda y selección por índice)
-  updateSession(phone, { estado: 'flow_cert_programa', programOptions: programsWithTitle });
-
-  if (programsWithTitle.length === 1) {
-    return _handleCertProgramSelected(phone, 0, { ...session, programOptions: programsWithTitle });
+  // "Buscar" solo si hay más de 8 (ocupa el slot 9 antes de la estática)
+  if (certs.length > 8) {
+    rows.push({
+      id:          'cert_buscar',
+      title:       '🔍 Buscar otro certificado',
+      description: 'Escribe el nombre del curso',
+    });
   }
 
-  await _sendCertTop5(phone, programsWithTitle);
+  // Fila estática siempre al final (slot 9 o 10 según haya búsqueda)
+  rows.push({
+    id:          'cert_tipo_avanzado',
+    title:       '🙋 No veo mi certificado',
+    description: 'Diplomados, PEE o faltantes',
+  });
+
+  await sendList(
+    phone,
+    'Mis Certificados',
+    `🎓 Aquí están tus certificados disponibles.\nSelecciona uno para descargarlo:`,
+    'W|E Educación Ejecutiva',
+    '🎓 Ver certificados',
+    [{ title: 'Certificados emitidos', rows }]
+  );
 }
 
 async function _sendCertTop5(phone, allPrograms) {
@@ -253,12 +313,42 @@ async function _handleCertProgramSelected(phone, index, session) {
   }
 }
 
-// ── Búsqueda libre de programa ────────────────────────────────────────────────
+// ── Búsqueda libre ────────────────────────────────────────────────────────────
 
+/**
+ * Bifurca la búsqueda según el flujo activo:
+ *   - certOptions presentes → flujo Odoo (busca en certificados reales)
+ *   - programOptions presentes → flujo DB (busca en programas locales)
+ */
 async function handleCertSearch(phone, keyword, session) {
-  const allPrograms = session.programOptions || [];
-  const kw          = keyword.trim().toLowerCase();
+  const kw = keyword.trim().toLowerCase();
 
+  // ── Flujo Odoo: buscar en session.certOptions ──────────────────────────
+  const certOptions = session.certOptions || [];
+  if (certOptions.length > 0) {
+    const results = certOptions.filter(c =>
+      (c.courseName || '').toLowerCase().includes(kw)
+    );
+
+    if (results.length === 0) {
+      await sendButtons(
+        phone,
+        `No encontré ningún certificado con "*${keyword}*" 😔\n¿Qué deseas hacer?`,
+        [
+          { id: 'cert_buscar', title: '🔍 Buscar de nuevo' },
+          { id: 'cert_asesor', title: '💬 Hablar con asesor' },
+        ]
+      );
+      updateSession(phone, { estado: 'flow_cert_busqueda' });
+      return;
+    }
+
+    updateSession(phone, { estado: 'flow_cert_programa' });
+    return _sendCertOdooSearchResults(phone, keyword, results);
+  }
+
+  // ── Flujo DB: buscar en session.programOptions ─────────────────────────
+  const allPrograms = session.programOptions || [];
   const results = allPrograms
     .map((p, i) => ({ ...p, _index: i }))
     .filter(p =>
@@ -276,7 +366,6 @@ async function handleCertSearch(phone, keyword, session) {
         { id: 'cert_asesor', title: '💬 Hablar con asesor' },
       ]
     );
-    // Mantener estado flow_cert_busqueda para que el alumno pueda reintentar
     updateSession(phone, { estado: 'flow_cert_busqueda' });
     return;
   }
@@ -285,17 +374,182 @@ async function handleCertSearch(phone, keyword, session) {
   await _sendCertSearchResults(phone, keyword, results);
 }
 
+/** Muestra resultados de búsqueda para el flujo Odoo (IDs cert_odoo_*). */
+async function _sendCertOdooSearchResults(phone, keyword, results) {
+  // Máx 8 resultados + fila estática = 9 (dejamos hueco de seguridad)
+  const rows = results.slice(0, 8).map(c => ({
+    id:          `cert_odoo_${c.id}`,
+    title:       _buildCertTitle(c.courseName),
+    description: c.date ? `Emitido: ${_formatCertDate(c.date)}` : 'Fecha no disponible',
+  }));
+
+  // Si hay más resultados, opción de refinar
+  if (results.length > 8) {
+    rows.push({ id: 'cert_buscar', title: '🔍 Refinar búsqueda...', description: '' });
+  }
+
+  // Siempre el salvavidas al final
+  rows.push({
+    id:          'cert_tipo_avanzado',
+    title:       '🙋 No veo mi certificado',
+    description: 'Diplomados, PEE o faltantes',
+  });
+
+  await sendList(
+    phone,
+    'Resultados',
+    `Encontré *${results.length}* certificado(s) con "*${keyword}*" 🎓`,
+    'Selecciona el que buscas',
+    '🎓 Ver resultados',
+    [{ title: 'Certificados encontrados', rows }]
+  );
+}
+
 // ── Router único para todos los pasos del flujo ──────────────────────────────
 
 async function handleCertReply(phone, buttonId, session) {
 
-  // ── Buscador de programas ────────────────────────────────────────────────
-  if (buttonId === 'cert_buscar') {
-    updateSession(phone, { estado: 'flow_cert_busqueda' });
+  // ── Paso 7: Diplomados / PEE / Especializaciones → contexto primero ────
+  if (buttonId === 'cert_tipo_avanzado') {
+    let programs = [];
+    try {
+      const all = await getAllStudentPrograms(session.studentId);
+      programs  = all.filter(p => {
+        const tipo = _deduceTipo(p.program_name);
+        return tipo === 'Diplomado' || tipo === 'PEE' || tipo === 'Especialización';
+      });
+    } catch (err) {
+      console.error('[certificados] Error consultando programas avanzados:', err.message);
+    }
+
+    if (programs.length === 0) {
+      // Sin programas en BD → transferir directo con texto explicativo
+      await sendText(
+        phone,
+        `🎓 Los certificados de *Diplomados, PEE y Especializaciones* requieren una revisión académica manual.\n\n` +
+        `Esto se debe a que se validan convalidaciones, módulos completados y nota integradora antes de emitirlos.\n\n` +
+        `Un asesor del equipo académico revisará tu caso y te lo enviará 💙`
+      );
+      return runTransfer(phone, { ...session, ultimoTema: 'certificacion_avanzada' });
+    }
+
+    // Enriquecer con renderedTitle exacto antes de guardar en sesión
+    const programsWithTitle = programs.map(p => ({ ...p, renderedTitle: _buildRowTitle(p) }));
+
+    updateSession(phone, {
+      estado:              'flow_cert_programa',
+      certAvanzadoOptions: programsWithTitle,
+    });
+
+    const rows = programsWithTitle.slice(0, 9).map((p, i) => ({
+      id:          `cert_avanzado_${i}`,
+      title:       p.renderedTitle,
+      description: _buildRowDescription(p),
+    }));
+    rows.push({
+      id:          'cert_avanzado_otro',
+      title:       '🔍 Otro / No aparece',
+      description: 'Consultar por un programa antiguo',
+    });
+
+    await sendList(
+      phone,
+      'Certificado Final',
+      `¿Para cuál de tus programas necesitas el certificado final? 🎓`,
+      'W|E Educación Ejecutiva',
+      '🎓 Ver programas',
+      [{ title: 'Certificados Especiales', rows }]
+    );
+    return;
+  }
+
+  // ── Nuevo handler: selección dentro de cert_avanzado_* ───────────────────
+  if (buttonId?.startsWith('cert_avanzado_')) {
+    const TRANSFER_MSG =
+      `🎓 Los certificados de *Diplomados, PEE y Especializaciones* requieren una revisión académica manual.\n\n` +
+      `Esto se debe a que se validan convalidaciones, módulos completados y nota integradora antes de emitirlos.\n\n` +
+      `Un asesor del equipo académico revisará tu caso y te lo enviará 💙`;
+
+    let notaPrograma;
+    if (buttonId === 'cert_avanzado_otro') {
+      notaPrograma = 'No especificado en BD (Seleccionó "Otro")';
+    } else {
+      const idx     = parseInt(buttonId.replace('cert_avanzado_', ''), 10);
+      const program = (session.certAvanzadoOptions || [])[idx];
+      notaPrograma  = program?.program_name || 'Programa no identificado';
+    }
+
+    if (session.conversationId) {
+      addPrivateNote(
+        session.conversationId,
+        `📋 *Solicitud de revisión:* El alumno reporta que no visualiza su certificado (Posible Diplomado/PEE o error en emisión).\nPrograma indicado: ${notaPrograma}`
+      ).catch(err => console.error('[certificados] Error nota privada cert avanzado:', err));
+    }
+
+    await sendText(phone, TRANSFER_MSG);
+    return runTransfer(phone, { ...session, ultimoTema: 'certificacion_avanzada' });
+  }
+
+  // ── Paso 6: Certificado de Odoo seleccionado → descargar y enviar PDF ───
+  const odooMatch = buttonId?.match(/^cert_odoo_(\d+)$/);
+  if (odooMatch) {
+    const certId = parseInt(odooMatch[1], 10);
+    const cert   = (session.certOptions || []).find(c => c.id === certId);
+    const safeName = cert
+      ? _cleanVersion(cert.courseName).replace(/\s+/g, '_').slice(0, 30)
+      : 'WE';
+    const filename = `Certificado_${safeName}.pdf`;
+
+    await sendText(phone, '⏳ Generando tu certificado, dame un momento...');
+
+    let base64;
+    try {
+      base64 = await fetchCertificatePdf(certId);
+    } catch (err) {
+      console.error('[certificados] Error obteniendo PDF de Odoo:', err.message);
+      base64 = null;
+    }
+
+    if (base64) {
+      try {
+        await sendBase64Pdf(
+          phone,
+          base64,
+          filename,
+          `🎓 ¡Aquí tienes tu certificado! Felicitaciones por completar tu programa 🎉`
+        );
+        updateSession(phone, { estado: 'resuelto_bot', resuelto_bot_at: Date.now() });
+        return showBotResuelto(phone);
+      } catch (err) {
+        console.error('[certificados] Error enviando PDF por WhatsApp:', err.message);
+        await sendText(
+          phone,
+          `Tu certificado está listo, pero ocurrió un error al enviarlo por WhatsApp 😔\n` +
+          `Un asesor te lo enviará directamente 💙`
+        );
+        return runTransfer(phone, { ...session, ultimoTema: 'certificacion' });
+      }
+    }
+
+    // PDF null → aún no generado o vacío
     await sendText(
       phone,
-      `¡Claro! Escribe el nombre o una palabra clave del programa que buscas 🔍\n` +
-      `_(ej: Finanzas, Marketing, Excel...)_`
+      `Tu certificado está registrado, pero el PDF aún no se ha generado o está en proceso 📋\n\n` +
+      `Un asesor del equipo académico podrá darte más información 💙`
+    );
+    return runTransfer(phone, { ...session, ultimoTema: 'certificacion' });
+  }
+
+  // ── Buscador ─────────────────────────────────────────────────────────────
+  if (buttonId === 'cert_buscar') {
+    updateSession(phone, { estado: 'flow_cert_busqueda' });
+    // Mensaje contextual: Odoo (certOptions) vs DB (programOptions)
+    const esFlujoOdoo = (session.certOptions || []).length > 0;
+    await sendText(
+      phone,
+      esFlujoOdoo
+        ? `Por favor, escribe el nombre del programa o curso del cual buscas el certificado 🔍\n_(ej: Excel, Finanzas, SAP...)_`
+        : `¡Claro! Escribe el nombre o una palabra clave del programa que buscas 🔍\n_(ej: Finanzas, Marketing, Excel...)_`
     );
     return;
   }

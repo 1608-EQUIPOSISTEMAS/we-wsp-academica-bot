@@ -57,6 +57,11 @@ async function _authenticate() {
   console.log('[odoo] Sesión autenticada OK');
 }
 
+/** Garantiza que haya una cookie de sesión activa antes de cada request. */
+async function _ensureSession() {
+  if (!currentSessionCookie) await _authenticate();
+}
+
 // ── Búsqueda de alumno por email ──────────────────────────────────────────────
 
 async function _searchAlumno(email) {
@@ -206,6 +211,7 @@ async function _fetchFromOdoo(email) {
   return {
     success: true,
     data: {
+      partnerId,
       name:      r.names    || r.name?.split(' ')[0] || r.name || '',
       last_name: r.surnames || r.name?.split(' ').slice(1).join(' ') || '',
       email:     r.email    || email,
@@ -276,14 +282,15 @@ async function syncStudentFromOdoo(email) {
 
   // ── INSERT o UPDATE del alumno ────────────────────────────────────────────
   const { rows } = await pool.query(
-    `INSERT INTO ods_student_bot (full_name, email, phone, is_active)
-     VALUES ($1, $2, $3, true)
+    `INSERT INTO ods_student_bot (full_name, email, phone, is_active, odoo_partner_id)
+     VALUES ($1, $2, $3, true, $4)
      ON CONFLICT (email) DO UPDATE SET
-       full_name  = EXCLUDED.full_name,
-       phone      = EXCLUDED.phone,
-       updated_at = NOW()
+       full_name       = EXCLUDED.full_name,
+       phone           = EXCLUDED.phone,
+       odoo_partner_id = EXCLUDED.odoo_partner_id,
+       updated_at      = NOW()
      RETURNING id`,
-    [fullName, d.email, d.phone || null]
+    [fullName, d.email, d.phone || null, d.partnerId]
   );
   const studentId = rows[0].id;
 
@@ -350,8 +357,88 @@ async function syncStudentFromOdoo(email) {
     [d.email]
   );
 
-  console.log(`[odoo] Sync OK — email=${email} studentId=${studentId} programas=${d.programs?.length ?? 0}`);
-  return { synced: true, studentId };
+  console.log(`[odoo] Sync OK — email=${email} studentId=${studentId} odooPartnerId=${d.partnerId} programas=${d.programs?.length ?? 0}`);
+  return { synced: true, studentId, odooPartnerId: d.partnerId };
 }
 
-module.exports = { syncStudentFromOdoo };
+// ── Certificados ──────────────────────────────────────────────────────────────
+
+/**
+ * Lista todos los certificados emitidos para un alumno.
+ * @param {number} partnerId — res.partner id del alumno en Odoo
+ * @returns {Array<{ id, code, courseName, date, state }>} — vacío si falla o no hay
+ */
+async function fetchStudentCertificates(partnerId) {
+  try {
+    await _ensureSession();
+    const res = await axios.post(
+      `${ODOO_BASE}/web/dataset/search_read`,
+      {
+        jsonrpc: '2.0',
+        method:  'call',
+        params: {
+          model:  'issued.certificates',
+          domain: [['partner_id', 'in', [partnerId]]],
+          fields: ['id', 'code', 'slide_channel_id', 'date_issue', 'state'],
+          order:  'date_issue desc',
+        },
+      },
+      { timeout: 15000, headers: { Cookie: currentSessionCookie } }
+    );
+
+    if (res.data?.error) {
+      console.warn('[odoo] fetchStudentCertificates error:', res.data.error.message);
+      return [];
+    }
+
+    return (res.data?.result?.records ?? []).map(r => ({
+      id:         r.id,
+      code:       r.code || '',
+      courseName: Array.isArray(r.slide_channel_id) ? r.slide_channel_id[1] : (r.slide_channel_id || ''),
+      date:       r.date_issue || null,
+      state:      r.state || '',
+    }));
+  } catch (err) {
+    console.error('[odoo] fetchStudentCertificates exception:', err.message);
+    return [];
+  }
+}
+
+/**
+ * Obtiene el PDF en base64 de un certificado específico.
+ * @param {number} certId — id del registro en issued.certificates
+ * @returns {string|null} — base64 del PDF, o null si no existe o hay error
+ */
+async function fetchCertificatePdf(certId) {
+  try {
+    await _ensureSession();
+    const res = await axios.post(
+      `${ODOO_BASE}/web/dataset/call_kw`,
+      {
+        jsonrpc: '2.0',
+        method:  'call',
+        params: {
+          model:  'issued.certificates',
+          method: 'read',
+          args:   [[certId], ['pdf_certificate_file']],
+          kwargs: {},
+        },
+      },
+      { timeout: 20000, headers: { Cookie: currentSessionCookie } }
+    );
+
+    if (res.data?.error) {
+      console.warn('[odoo] fetchCertificatePdf error:', res.data.error.message);
+      return null;
+    }
+
+    const records = res.data?.result ?? [];
+    const base64  = records[0]?.pdf_certificate_file;
+    return base64 || null;
+  } catch (err) {
+    console.error('[odoo] fetchCertificatePdf exception:', err.message);
+    return null;
+  }
+}
+
+module.exports = { syncStudentFromOdoo, fetchStudentCertificates, fetchCertificatePdf };
