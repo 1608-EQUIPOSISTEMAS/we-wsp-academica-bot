@@ -50,10 +50,11 @@ function _deduceTipo(name) {
 
 /**
  * Descripción de la fila: "09 Martes | Diplomado"
- * Si no hay fecha, devuelve solo el tipo.
+ * Prioriza program_type (campo real de la DB vía catalog.description).
+ * Cae en _deduceTipo como fallback si no viene del query.
  */
 function _buildRowDescription(p) {
-  const tipo = _deduceTipo(p.program_name);
+  const tipo = p.program_type || _deduceTipo(p.program_name);
   if (!p.start_date) return tipo;
   const d         = new Date(p.start_date);
   const numeroDia = String(d.getUTCDate()).padStart(2, '0');

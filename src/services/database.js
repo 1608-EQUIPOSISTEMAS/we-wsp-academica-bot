@@ -330,11 +330,13 @@ async function getStudentCronograma(studentId) {
        pe.start_date,
        pe.end_date,
        pe.whatsapp_link,
-       pe.teams_link
+       pe.teams_link,
+       cat.description AS program_type
      FROM ods_student_programs  sp
-     JOIN program_editions       pe ON pe.edition_num_id     = sp.program_edition_id
-     JOIN program_versions       pv ON pv.program_version_id = pe.program_version_id
-     JOIN programs               p  ON p.program_id          = pv.program_id
+     JOIN program_editions       pe  ON pe.edition_num_id     = sp.program_edition_id
+     JOIN program_versions       pv  ON pv.program_version_id = pe.program_version_id
+     JOIN programs               p   ON p.program_id          = pv.program_id
+     LEFT JOIN catalog           cat ON cat.catalog_id        = p.cat_type_program
      WHERE sp.student_id          = $1
        AND sp.modality             = 'EN_VIVO'
        AND sp.program_edition_id  IS NOT NULL
