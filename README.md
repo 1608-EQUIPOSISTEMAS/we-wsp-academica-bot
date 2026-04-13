@@ -39,7 +39,7 @@ Completar cada variable:
 | `DB_USER` | Usuario PostgreSQL (default: `postgres`) |
 | `DB_PASSWORD` | Contraseña PostgreSQL |
 | `ANTHROPIC_API_KEY` | API Key de Anthropic |
-| `PORT` | Puerto del bot (default: `3005`) |
+| `PORT` | Puerto del bot (default: `3006`) |
 
 ---
 
@@ -102,7 +102,7 @@ npm run dev
 Para exponer el webhook local a internet (necesario para Meta), usar [ngrok](https://ngrok.com/):
 
 ```bash
-ngrok http 3005
+ngrok http 3006
 ```
 
 Copiar la URL HTTPS de ngrok para configurar en Meta Developers.
@@ -152,7 +152,7 @@ En el `Caddyfile` del VPS (donde ya corre el CRM):
 
 ```caddyfile
 bot.tudominio.com {
-    reverse_proxy we-whatsapp-bot:3005
+    reverse_proxy we-whatsapp-bot:3006
 }
 ```
 
@@ -164,8 +164,8 @@ tudominio.com {
     reverse_proxy /app* crm-app:3000
 
     # Bot WhatsApp
-    reverse_proxy /webhook* we-whatsapp-bot:3005
-    reverse_proxy /health* we-whatsapp-bot:3005
+    reverse_proxy /webhook* we-whatsapp-bot:3006
+    reverse_proxy /health* we-whatsapp-bot:3006
 }
 ```
 
