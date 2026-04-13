@@ -1,10 +1,10 @@
 services:
-  we-whatsapp-bot:
-    container_name: we-whatsapp-bot
+  we-bot:
+    container_name: we-bot
     restart: always
     build: .
     expose:
-      - "3005"
+      - "3006"
     env_file:
       - .env
     networks:

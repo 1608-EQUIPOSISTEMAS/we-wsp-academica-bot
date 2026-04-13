@@ -1,0 +1,28 @@
+# Dependencias — se instalan dentro de la imagen
+node_modules
+
+# Variables de entorno — se inyectan en runtime vía env_file
+.env
+.env.*
+!.env.example
+
+# Git
+.git
+.gitignore
+
+# Logs
+*.log
+npm-debug.log*
+
+# Documentación y archivos de desarrollo
+docs/
+*.md
+!README.md
+
+# Archivos de desarrollo/test
+docker-compose.dev.yml
+scripts/
+
+# OS
+.DS_Store
+Thumbs.db

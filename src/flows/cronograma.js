@@ -1,4 +1,4 @@
-const { sendText, sendButtons, sendList } = require('../services/whatsapp');
+const { sendText, sendButtons, sendList, delay } = require('../services/whatsapp');
 const { updateSession }                   = require('../services/session');
 const { tagFlow }                         = require('../services/chatwoot');
 const { runTransfer }                     = require('./transfer');
@@ -109,6 +109,7 @@ async function handleCronograma(phone, session) {
       `Si crees que hay un error o necesitas el cronograma de un programa específico, ` +
       `un asesor puede ayudarte.`
     );
+    await delay(500);
     await sendButtons(
       phone,
       '¿Qué deseas hacer?',
@@ -194,6 +195,7 @@ async function handleCronogramaReply(phone, id, session) {
 
     await sendText(phone, msg.trim());
     updateSession(phone, { estado: 'resuelto_bot', resuelto_bot_at: Date.now() });
+    await delay(500);
     await showBotResuelto(phone);
     return;
   }
@@ -221,6 +223,7 @@ async function handleCronogramaReply(phone, id, session) {
 
   await sendText(phone, msg.trim());
   updateSession(phone, { estado: 'resuelto_bot', resuelto_bot_at: Date.now() });
+  await delay(500);
   await showBotResuelto(phone);
 }
 

@@ -185,6 +185,23 @@ async function assignAgent(conversationId, agentId) {
   }
 }
 
+/**
+ * Desasigna el agente actual de la conversación (deja el campo vacío).
+ * Necesario al hacer transfer para que el bot no quede como agente asignado
+ * y la conversación entre limpia a la cola del equipo.
+ */
+async function unassignAgent(conversationId) {
+  try {
+    await axios.post(
+      apiUrl(`/accounts/${ACCOUNT_ID}/conversations/${conversationId}/assignments`),
+      { assignee_id: null },
+      { headers: getHeaders() }
+    );
+  } catch (err) {
+    console.error('[chatwoot] Error unassignAgent:', err.response?.data || err.message);
+  }
+}
+
 // ── Consultar mensajes de una conversación ─────────────────────────────────
 
 /**
@@ -205,7 +222,8 @@ async function getConversationMessages(conversationId) {
 }
 
 /**
- * Verifica si un agente humano (no el bot) ha enviado mensajes en la conversación.
+ * Verifica si un asesor HUMANO ha enviado mensajes en la conversación.
+ * Excluye explícitamente los mensajes del W|E BOT (sender.id = CHATWOOT_BOT_AGENT_ID).
  *
  * @param {number|string} conversationId
  * @param {number}        [sinceMs=0]  Solo considerar mensajes después de este timestamp (ms)
@@ -213,34 +231,28 @@ async function getConversationMessages(conversationId) {
  *
  * En la API de Chatwoot:
  *   message_type: 0=incoming, 1=outgoing, 2=activity
- *   sender.type: 'user' (agente humano en API), 'agent_bot' (bot), 'contact' (contacto)
- *
- * IMPORTANTE: El bot envía mensajes con las credenciales del agente "Marketing"
- * (CHATWOOT_DEFAULT_AGENT_ID), por lo que sus mensajes tienen sender.type='user'.
- * Filtramos por sender.id para excluir los mensajes del bot.
- */
-/**
- * Verifica si un agente humano ha enviado mensajes en la conversación.
- *
- * Con la arquitectura PENDING→OPEN, todos los mensajes del bot se envían
- * mientras la conv está en PENDING. Después del openConversation() en el
- * transfer, cualquier mensaje outgoing con ts > sinceMs es del asesor humano.
- * Ya no es necesario filtrar por botAgentId.
+ *   sender.id del bot = CHATWOOT_BOT_AGENT_ID (default: 1)
  */
 async function checkAgentReplied(conversationId, sinceMs = 0) {
+  // ID del agente-bot en Chatwoot: sus mensajes no cuentan como respuesta humana.
+  const botAgentId = Number(process.env.CHATWOOT_BOT_AGENT_ID || 1);
+
   const messages = await getConversationMessages(conversationId);
 
   for (const msg of messages) {
-    // Requiere sender.id explícito: mensajes del bot enviados por Meta API directa
-    // (sendTextDirect) pueden aparecer ecos sin sender de agente → se excluyen.
-    if (msg.message_type === 1 && msg.private === false && msg.sender?.id) {
+    if (
+      msg.message_type === 1    &&   // outgoing (asesor → alumno)
+      msg.private       === false &&  // no es nota privada
+      msg.sender?.id             &&   // tiene sender identificado
+      msg.sender.id !== botAgentId    // NO es el W|E BOT
+    ) {
       const ts = msg.created_at ? msg.created_at * 1000 : Date.now();
       if (sinceMs && ts < sinceMs) continue;
-      console.log(`[chatwoot] checkAgentReplied: encontrado msg de agente "${msg.sender?.name}" (id=${msg.sender?.id}) ts=${new Date(ts).toISOString()} en conv=${conversationId}`);
+      console.log(`[chatwoot] checkAgentReplied: asesor humano "${msg.sender?.name}" (id=${msg.sender?.id}) respondió en conv=${conversationId} ts=${new Date(ts).toISOString()}`);
       return { responded: true, respondedAt: ts };
     }
   }
-  console.log(`[chatwoot] checkAgentReplied: ningún msg de agente en conv=${conversationId} (since=${sinceMs ? new Date(sinceMs).toISOString() : 'inicio'})`);
+  console.log(`[chatwoot] checkAgentReplied: sin respuesta humana en conv=${conversationId} (since=${sinceMs ? new Date(sinceMs).toISOString() : 'inicio'})`);
   return { responded: false, respondedAt: null };
 }
 
@@ -282,6 +294,7 @@ module.exports = {
   setCustomAttributes,
   assignTeam,
   assignAgent,
+  unassignAgent,
   getConversationMessages,
   checkAgentReplied,
   tagFlow,

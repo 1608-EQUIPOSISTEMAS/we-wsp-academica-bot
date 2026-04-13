@@ -56,9 +56,6 @@ const TEXT_TO_ID = {
   // ── Común (ambos submenús) ──────────────────────────────────────────────
   '🔙 Menú principal':                     'menu_principal',
   '📋 Ver menú':                           'volver_menu',
-  // ── Campus Virtual ──────────────────────────────────────────────────────
-  '✅ Sí, gracias':                        'campus_ok',
-  '❌ No pude ingresar':                   'campus_no',
   // ── Certificación — modalidad ───────────────────────────────────────────
   '🏫 Pres. / En vivo':                    'cert_pres_en_vivo',
   '💻 Online':                             'cert_online',
@@ -71,9 +68,8 @@ const TEXT_TO_ID = {
   // ── Certificación — confirmación ────────────────────────────────────────
   '✅ Entendido':                          'cert_ok',
   '❓ Tengo otra duda':                    'cert_otra_duda',
-  // ── Materiales ──────────────────────────────────────────────────────────
+  // ── Campus / Materiales ──────────────────────────────────────────────────
   '✅ Ya tengo acceso':                    'mat_ok',
-  '❌ No veo materiales':                  'mat_no_acceso',
   // ── Instaladores — selector de programa ────────────────────────────────
   'SAP HANA':                              'inst_hana',
   'SAP R/3':                               'inst_r3',
@@ -97,13 +93,12 @@ const TEXT_TO_ID = {
   '🏠 Menú principal':                     'insc_menu',
   // ── Justificaciones ──────────────────────────────────────────────────────
   '✅ Listo, ya llené':                    'just_listo',
-  '❌ El link no abre':                    'just_link_falla',
-  '❓ Tengo otra duda':                    'just_otra_duda',
   // ── Exámenes Internacionales ─────────────────────────────────────────────
   '✅ Llené el form':                      'exam_formulario_ok',
-  '❓ Una pregunta':                       'exam_pregunta',
+  // ── Compartido: flujos con formulario Google ─────────────────────────────
+  '⚠️ Tengo problemas':                   'form_problemas',
   // ── Alumno Flex ──────────────────────────────────────────────────────────
-  '✅ Ya llené el form':                   'flex_formulario_ok',
+  '✅ Ya llené el form':                   'flex_form_lleno',
   '❓ Tengo más dudas':                    'flex_mas_dudas',
   // ── Paginación de programas ──────────────────────────────────────────────
   '➕ Ver más programas':                  'prog_ver_mas',
@@ -407,6 +402,46 @@ async function route(phone, session, { text, buttonId, listId }) {
       if (text) return handleCertSearch(phone, text, session);
       return;
 
+    // ── Certificación — Sub-flujo avanzado (Diplomados/PEE): selección de programa ──
+    case 'flow_cert_avanzado': {
+      // IDs directos: cert_avanzado_0, cert_avanzado_1, ..., cert_avanzado_otro
+      if (id) return handleCertReply(phone, id, session);
+
+      if (text) {
+        const normInput           = normalizeText(text.split('\n')[0].trim());
+        const certAvanzadoOptions = session.certAvanzadoOptions || [];
+
+        const avMatch = certAvanzadoOptions.findIndex(p => {
+          const fullName      = p.program_name || '';
+          const normFull      = normalizeText(fullName);
+          const normAbbr      = normalizeText(p.abbreviation || '');
+          const normRend      = normalizeText(p.renderedTitle || '');
+          const normTitle     = normFull.slice(0, 24);
+          const normTrunc     = normalizeText(
+            fullName.length > 24 ? fullName.slice(0, 21) + '...' : fullName
+          );
+          const normRendTrunc = normalizeText(
+            (p.renderedTitle || '').length > 24
+              ? (p.renderedTitle || '').slice(0, 21) + '...'
+              : (p.renderedTitle || '')
+          );
+          return normFull  === normInput || normAbbr  === normInput ||
+                 normRend  === normInput || normTitle === normInput ||
+                 normTrunc === normInput || normRendTrunc === normInput ||
+                 normFull.includes(normInput) || normInput.includes(normTitle);
+        });
+        if (avMatch >= 0) return handleCertReply(phone, `cert_avanzado_${avMatch}`, session);
+
+        if (normInput.includes('otro') || normInput.includes('no aparece') ||
+            normInput.includes('antiguo')) {
+          return handleCertReply(phone, 'cert_avanzado_otro', session);
+        }
+
+        await sendText(phone, `No reconocí esa opción 😊\nPor favor selecciona una de la lista.`);
+      }
+      return;
+    }
+
     // ── Certificación — Rama B: selección de programa ─────────────────────
     case 'flow_cert_programa': {
       // IDs interactivos: cert_odoo_*, cert_tipo_avanzado, cert_prog_*, cert_buscar, etc.
@@ -436,52 +471,12 @@ async function route(phone, session, { text, buttonId, listId }) {
           });
           if (certMatch) return handleCertReply(phone, `cert_odoo_${certMatch.id}`, session);
 
-          // Texto que describe la fila estática final (Diplomados/PEE)
+          // Texto que describe la fila estática final (Diplomados/PEE o "No veo mi certificado")
           if (normInput.includes('diplomado') || normInput.includes('avanzado') ||
-              normInput.includes('pee') || normInput.includes('especiali')) {
+              normInput.includes('pee')       || normInput.includes('especiali') ||
+              normInput.includes('no veo')    || normInput.includes('faltante')  ||
+              normInput.includes('🙋')) {
             return handleCertReply(phone, 'cert_tipo_avanzado', session);
-          }
-
-          await sendText(phone,
-            `No reconocí esa opción 😊\nPor favor selecciona una de la lista.`
-          );
-          return;
-        }
-
-        // ── Rama B avanzada: buscar en certAvanzadoOptions ────────────────
-        const certAvanzadoOptions = session.certAvanzadoOptions || [];
-        if (certAvanzadoOptions.length > 0) {
-          const avMatch = certAvanzadoOptions.findIndex(p => {
-            const fullName     = p.program_name || '';
-            const normFull     = normalizeText(fullName);
-            const normAbbr     = normalizeText(p.abbreviation || '');
-            const normRend     = normalizeText(p.renderedTitle || '');
-            // Nivel: primeros 24 chars del nombre completo
-            const normTitle    = normFull.slice(0, 24);
-            // Nivel: simulación de _buildRowTitle (>24 → 21+'...')
-            const normTrunc    = normalizeText(
-              fullName.length > 24 ? fullName.slice(0, 21) + '...' : fullName
-            );
-            // Nivel: renderedTitle ya truncado a 24 por _buildRowTitle
-            const normRendTrunc = normalizeText(
-              (p.renderedTitle || '').length > 24
-                ? (p.renderedTitle || '').slice(0, 21) + '...'
-                : (p.renderedTitle || '')
-            );
-            return normFull      === normInput ||
-                   normAbbr      === normInput ||
-                   normRend      === normInput ||
-                   normTitle     === normInput ||
-                   normTrunc     === normInput ||
-                   normRendTrunc === normInput ||
-                   normFull.includes(normInput) ||
-                   normInput.includes(normTitle);
-          });
-          if (avMatch >= 0) return handleCertReply(phone, `cert_avanzado_${avMatch}`, session);
-
-          if (normInput.includes('otro') || normInput.includes('no aparece') ||
-              normInput.includes('antiguo')) {
-            return handleCertReply(phone, 'cert_avanzado_otro', session);
           }
 
           await sendText(phone,
@@ -533,23 +528,9 @@ async function route(phone, session, { text, buttonId, listId }) {
       if (text) return handleReclamoDatos(phone, text, session);
       return;
 
-    // ── Alumno Flex — Rama B: selección de programa ───────────────────────
-    case 'flow_flex_programa': {
-      if (id) return handleAlumnoFlexReply(phone, id, session);
-      if (text) {
-        const match = resolveProgram(text, session.programOptions);
-        if (match) return handleAlumnoFlexReply(phone, `flex_prog_${match.index}`, session);
-        await sendText(phone,
-          `No reconocí esa opción 😊\nPor favor selecciona una de las opciones de la lista.`
-        );
-        return _reshowProgramList(phone, session, 'flex');
-      }
-      return;
-    }
-
-    // ── Alumno Flex — Rama A / info ────────────────────────────────────────
+    // ── Alumno Flex — opciones (formulario / dudas / menú) ───────────────
     case 'flow_alumno_flex':
-    case 'flow_flex_info':     // Rama B: mostrando info + formulario
+    case 'flow_flex_opciones':
       if (id) return handleAlumnoFlexReply(phone, id, session);
       return;
 
@@ -663,7 +644,7 @@ async function _reshowProgramList(phone, session, tipo) {
       '¿Para cuál de tus programas deseas solicitar la modalidad Flex? ⚡',
       footer,
       '📋 Ver programas',
-      [{ title: 'Programas Presenciales / En vivo', rows }]
+      [{ title: 'Programas En Vivo', rows }]
     );
   }
 }
@@ -689,10 +670,16 @@ async function handleMenuOption(phone, optionId, session) {
     case 'enviar_comprobante': {
       const tramite = optionId === 'estado_cuenta' ? 'Estado de Cuenta' : 'Envío de Comprobante';
       if (session.verified === true) {
+        if (session.conversationId) {
+          addPrivateNote(
+            session.conversationId,
+            `📋 *Solicitud financiera:* El alumno solicita *${tramite}*. (Identidad verificada por coincidencia de celular)`
+          ).catch(err => console.error('[bot] Error nota privada pagos verificado:', err));
+        }
         await sendText(phone,
-          `Módulo financiero en construcción 🚧\nPronto podrás gestionar tu *${tramite}* directamente desde aquí.`
+          `Entendido 💙 En breve un asesor del equipo de finanzas te atenderá para procesar tu solicitud.`
         );
-        return showMenuPagos(phone);
+        return runTransfer(phone, { ...session, ultimoTema: 'pagos' });
       }
       // Celular no coincide → alerta + transfer con contexto
       if (session.conversationId) {

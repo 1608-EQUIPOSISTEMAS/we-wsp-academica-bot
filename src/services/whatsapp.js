@@ -16,6 +16,9 @@ const FormData = require('form-data');
 const { getSession }               = require('./session');
 const { postMessage, addPrivateNote } = require('./chatwoot');
 
+/** Pausa prometificada para evitar condición de carrera en la cola de Meta. */
+const delay = ms => new Promise(res => setTimeout(res, ms));
+
 // ── Límites WhatsApp ──────────────────────────────────────────────────────────
 const WA_LIMITS = {
   buttonTitle:     20,
@@ -301,4 +304,4 @@ async function sendCtaUrl(phone, bodyText, displayText, url) {
     .catch(err => console.error('[whatsapp] Error en nota privada CTA:', err));
 }
 
-module.exports = { sendText, sendTextDirect, sendButtons, sendButtonsWithHeader, sendList, sendCtaUrl, sendBase64Pdf };
+module.exports = { sendText, sendTextDirect, sendButtons, sendButtonsWithHeader, sendList, sendCtaUrl, sendBase64Pdf, delay };

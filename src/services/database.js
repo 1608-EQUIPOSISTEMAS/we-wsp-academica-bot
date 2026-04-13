@@ -88,13 +88,21 @@ async function getAllStudentPrograms(studentId) {
 /** Programas presenciales/en vivo activos (para solicitud Alumno Flex) */
 async function getStudentPresencialPrograms(studentId) {
   const query = `
-    SELECT id, program_name, program_code, modality, status, start_date, end_date,
-           certificate_status, certificate_url
-    FROM ods_student_programs
-    WHERE student_id = $1
-      AND status = 'active'
-      AND modality IN ('PRESENCIAL', 'EN_VIVO')
-    ORDER BY start_date DESC
+    SELECT
+      sp.id, sp.program_name, sp.program_code, sp.modality, sp.status,
+      sp.start_date, sp.end_date, sp.certificate_status, sp.certificate_url,
+      COALESCE(pv_live.abbreviation, pv_online.abbreviation) AS abbreviation
+    FROM ods_student_programs    sp
+    LEFT JOIN program_editions   pe
+           ON pe.edition_num_id       = sp.program_edition_id
+    LEFT JOIN program_versions   pv_live
+           ON pv_live.program_version_id  = pe.program_version_id
+    LEFT JOIN program_versions   pv_online
+           ON pv_online.program_version_id = sp.program_version_id
+    WHERE sp.student_id = $1
+      AND sp.status     = 'active'
+      AND sp.modality   IN ('PRESENCIAL', 'EN_VIVO')
+    ORDER BY sp.start_date DESC
   `;
   const { rows } = await pool.query(query, [studentId]);
   return rows;

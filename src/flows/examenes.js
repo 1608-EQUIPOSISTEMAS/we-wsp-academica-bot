@@ -1,7 +1,8 @@
-const { sendText, sendButtons } = require('../services/whatsapp');
-const { updateSession }         = require('../services/session');
-const { tagFlow }               = require('../services/chatwoot');
-const { runTransfer }           = require('./transfer');
+const { sendText, sendButtons, delay }  = require('../services/whatsapp');
+const { updateSession }                 = require('../services/session');
+const { tagFlow, addPrivateNote }       = require('../services/chatwoot');
+const { runTransfer }                   = require('./transfer');
+const { showMenu }                      = require('./menu');
 
 async function showExamenes(phone) {
   updateSession(phone, { estado: 'flow_examenes', ultimoTema: 'examenes_int' });
@@ -16,12 +17,14 @@ async function showExamenes(phone) {
     `🚨 *Este proceso tiene una duración de entre 10 a 15 días hábiles.* ✨`
   );
 
+  await delay(500);
   await sendButtons(
     phone,
     `¿Qué deseas hacer?`,
     [
       { id: 'exam_formulario_ok', title: '✅ Llené el form' },
-      { id: 'exam_pregunta',      title: '❓ Una pregunta' },
+      { id: 'form_problemas',     title: '⚠️ Tengo problemas' },
+      { id: 'menu_principal',     title: '🔙 Menú principal' },
     ]
   );
 }
@@ -35,8 +38,18 @@ async function handleExamenesReply(phone, buttonId, session) {
     );
     await runTransfer(phone, { ...session, ultimoTema: 'examenes_int' });
 
-  } else if (buttonId === 'exam_pregunta') {
+  } else if (buttonId === 'form_problemas') {
+    if (session.conversationId) {
+      addPrivateNote(
+        session.conversationId,
+        `⚠️ *Exámenes Internacionales:* El alumno reporta problemas al completar el formulario de inscripción al examen.`
+      ).catch(err => console.error('[bot] Error nota privada examenes:', err));
+    }
     await runTransfer(phone, { ...session, ultimoTema: 'examenes_int' });
+
+  } else if (buttonId === 'menu_principal') {
+    updateSession(phone, { estado: 'menu' });
+    await showMenu(phone, session.nombre);
   }
 }
 

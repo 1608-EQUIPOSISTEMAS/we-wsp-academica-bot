@@ -1,5 +1,5 @@
 const { sendTextDirect }                                                    = require('../services/whatsapp');
-const { addPrivateNote, deactivateBot, updateLabels, assignTeam, openConversation } = require('../services/chatwoot');
+const { addPrivateNote, deactivateBot, updateLabels, assignTeam, unassignAgent, openConversation } = require('../services/chatwoot');
 const { updateSession }                                                     = require('../services/session');
 const { isWithinBusinessHours, getScheduleText }                            = require('../services/schedule');
 const { createSolicitud }                                                   = require('../services/database');
@@ -18,9 +18,10 @@ const TOPIC_TEAM = {
   cronograma:           TEAM_ACADEMICO,
   examenes_int:         TEAM_ACADEMICO,
   materiales:           TEAM_ACADEMICO,
-  reclamo_certificado:  TEAM_ACADEMICO,
-  reclamo_activacion:   TEAM_ACADEMICO,
-  reclamo_materiales:   TEAM_ACADEMICO,
+  reclamo_certificado:       TEAM_ACADEMICO,
+  reclamo_activacion:        TEAM_ACADEMICO,
+  reclamo_materiales:        TEAM_ACADEMICO,
+  certificacion_avanzada:    TEAM_ACADEMICO,
   instaladores:         TEAM_SOPORTE,
   soporte_sap:          TEAM_SOPORTE,
   soporte_office:       TEAM_SOPORTE,
@@ -87,6 +88,11 @@ function applyLabelsAndAssign(convId, session, labels) {
   updateLabels(convId, { add: labels });
   const teamId = TOPIC_TEAM[session.ultimoTema] || TEAM_GENERAL;
   assignTeam(convId, teamId);
+  // Desasignar el bot como agente para que la conversación entre
+  // limpia a la cola del equipo y una asesora pueda auto-asignársela.
+  unassignAgent(convId).catch(err =>
+    console.error('[transfer] Error al desasignar agente:', err)
+  );
 }
 
 // ── Transfer principal ────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-const { sendText, sendButtons, sendList } = require('../services/whatsapp');
+const { sendText, sendButtons, sendList, delay } = require('../services/whatsapp');
 const { updateSession }                   = require('../services/session');
 const { tagFlow }                         = require('../services/chatwoot');
 const { runTransfer }                     = require('./transfer');
@@ -94,6 +94,7 @@ async function handleInstaladoresReply(phone, buttonId, session) {
 
   } else if (buttonId === 'inst_o365') {
     await sendText(phone, `Entendido, un asesor te ayudará con tu cuenta de Office 365 en breve 💙`);
+    await delay(500);
     await askLaptopType(phone, 'soporte_office');
 
   } else if (buttonId === 'inst_otro') {
@@ -103,11 +104,13 @@ async function handleInstaladoresReply(phone, buttonId, session) {
   } else if (buttonId === 'inst_hana_clave') {
     updateSession(phone, { estado: 'flow_inst_hana_clave_ok' });
     await sendText(phone, MSG_CLAVE_HANA);
+    await delay(500);
     await sendButtons(phone, `¿Pudiste ingresar?`, BTNS_RESULTADO);
 
   } else if (buttonId === 'inst_hana_cargando') {
     updateSession(phone, { estado: 'flow_inst_hana_cargando_ok' });
     await sendText(phone, MSG_CORPORATIVA);
+    await delay(500);
     await sendButtons(phone, `¿Pudiste ejecutarlo?`, BTNS_RESULTADO);
 
   } else if (buttonId === 'inst_hana_instalacion') {
@@ -117,6 +120,7 @@ async function handleInstaladoresReply(phone, buttonId, session) {
   } else if (buttonId === 'inst_r3_clave') {
     updateSession(phone, { estado: 'flow_inst_r3_clave_ok' });
     await sendText(phone, MSG_CLAVE_R3);
+    await delay(500);
     await sendButtons(phone, `¿Pudiste ingresar?`, BTNS_RESULTADO);
 
   } else if (buttonId === 'inst_r3_otro') {
@@ -129,6 +133,7 @@ async function handleInstaladoresReply(phone, buttonId, session) {
       phone,
       `¡Excelente! 🎉 Me alegra que hayas podido solucionarlo.`
     );
+    await delay(500);
     await showBotResuelto(phone);
 
   // ── Resultado: sigue el problema → pedir laptop ────────────────────────

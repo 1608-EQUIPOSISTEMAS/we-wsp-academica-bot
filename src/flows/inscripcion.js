@@ -1,4 +1,4 @@
-const { sendText, sendCtaUrl, sendButtons } = require('../services/whatsapp');
+const { sendText, sendCtaUrl, sendButtons, delay } = require('../services/whatsapp');
 const { updateSession }                     = require('../services/session');
 const { tagFlow }                           = require('../services/chatwoot');
 const { runTransfer }                       = require('./transfer');
@@ -18,6 +18,7 @@ async function showInscripcion(phone, session) {
       `✅ No olvides revisar los horarios disponibles y elegir el que mejor se adapte a ti.\n\n` +
       `Si tienes dudas o necesitas ayuda con el registro, ¡estoy para ayudarte! 💬😊`
     );
+    await delay(500);
     await sendButtons(phone, `¿Pudiste completar tu registro? 😊`, [
       { id: 'insc_registrado', title: '✅ Ya me registré' },
       { id: 'insc_duda',       title: '❓ Tengo una duda' },
@@ -30,12 +31,14 @@ async function showInscripcion(phone, session) {
       `📌 *Arleth* (asesora comercial)\n` +
       `👉 +51 999 606 366`
     );
+    await delay(500);
     await sendCtaUrl(
       phone,
       `Para asesorarte con tu inscripción, contáctate con nuestra asesora experta 👩‍💻`,
       `Contactar a Arleth`,
       `https://wa.me/51999606366?text=Hola%20Arleth%2C%20soy%20alumno%20de%20W%7CE%20Educaci%C3%B3n%20Ejecutiva%20y%20quisiera%20recibir%20asesor%C3%ADa%20sobre%20inscripci%C3%B3n%20a%20un%20programa%20%F0%9F%98%8A`
     );
+    await delay(500);
     await sendButtons(phone, `¿Necesitas algo más?`, [
       { id: 'insc_menu', title: '🏠 Menú principal' },
     ]);

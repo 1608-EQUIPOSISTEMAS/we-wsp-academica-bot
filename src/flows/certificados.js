@@ -1,5 +1,5 @@
 const { sendText, sendButtons, sendList,
-        sendBase64Pdf }                  = require('../services/whatsapp');
+        sendBase64Pdf, delay }           = require('../services/whatsapp');
 const { updateSession }                  = require('../services/session');
 const { tagFlow, addPrivateNote }        = require('../services/chatwoot');
 const { runTransfer }                    = require('./transfer');
@@ -138,6 +138,7 @@ async function _showCertProgramList(phone, session) {
       `Si crees que hay un error o necesitas información sobre tu certificado, ` +
       `un asesor puede ayudarte.`
     );
+    await delay(500);
     await sendButtons(
       phone,
       '¿Qué deseas hacer?',
@@ -437,7 +438,7 @@ async function handleCertReply(phone, buttonId, session) {
     const programsWithTitle = programs.map(p => ({ ...p, renderedTitle: _buildRowTitle(p) }));
 
     updateSession(phone, {
-      estado:              'flow_cert_programa',
+      estado:              'flow_cert_avanzado',
       certAvanzadoOptions: programsWithTitle,
     });
 

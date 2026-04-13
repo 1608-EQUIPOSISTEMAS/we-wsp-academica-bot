@@ -1,4 +1,4 @@
-const { sendText, sendButtons }               = require('../services/whatsapp');
+const { sendText, sendButtons, delay }        = require('../services/whatsapp');
 const { findAlumnoByEmail,
         checkAndUpdateMembership }            = require('../services/database');
 const { syncStudentFromOdoo }                 = require('../services/odoo');
@@ -114,6 +114,7 @@ async function handleCorreo(phone, email, session) {
       ? `¡Hola ${alumno.full_name}! Qué gusto saludar a un miembro ${membershipTier} 🖤`
       : `✅ ¡Hola, ${alumno.full_name}! Te encontramos en el sistema 😊`;
     await sendText(phone, saludoInicial);
+    await delay(500);
     await showMenu(phone, alumno.full_name);
   } else {
     updateSession(phone, { estado: 'correo_no_encontrado' });

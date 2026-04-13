@@ -1,5 +1,6 @@
 require('dotenv').config();
-const express = require('express');
+const express   = require('express');
+const rateLimit = require('express-rate-limit');
 
 const { handleIncoming }                                         = require('./bot');
 const { postMessage, updateLabels }                              = require('./services/chatwoot');
@@ -9,9 +10,27 @@ const { sendText, sendList }                                     = require('./se
 const { startInactivityWatcher }                                 = require('./services/inactivity');
 
 const app  = express();
-const PORT = process.env.PORT || 3005;
+const PORT = process.env.PORT || 3006;
+
+// Necesario cuando el servidor corre detrás de un proxy/ngrok/reverse-proxy.
+// Sin esto express-rate-limit lanza ERR_ERL_UNEXPECTED_X_FORWARDED_FOR y
+// corta el pipeline antes de procesar cualquier webhook.
+app.set('trust proxy', 1);
 
 app.use(express.json());
+
+// ── Escudo 1: Rate limit HTTP por IP (100 req/min) ────────────────────────────
+const webhookLimiter = rateLimit({
+  windowMs:         60 * 1000,  // 1 minuto
+  max:              100,
+  standardHeaders:  true,
+  legacyHeaders:    false,
+  message:          { error: 'Too many requests' },
+  handler: (req, res, _next, options) => {
+    console.warn(`[rate-limit] IP bloqueada: ${req.ip} — excedió ${options.max} req/min`);
+    res.status(429).json(options.message);
+  },
+});
 
 // ── Debounce anti-flood (1.5s por teléfono) ───────────────────────────────────
 // Evita que ráfagas de mensajes rápidos disparen múltiples ejecuciones del bot.
@@ -56,6 +75,49 @@ function scheduleMessage(conversationId, phone, msg) {
   }, DEBOUNCE_MS);
 
   pendingMessages.set(phone, { timer, conversationId, texts, msg });
+}
+
+// ── Escudo 2: Anti-spam por teléfono (10 msgs/min) ───────────────────────────
+const PHONE_RATE_WINDOW_MS = 60 * 1000;  // ventana de 1 minuto
+const PHONE_RATE_MAX       = 10;         // máximo de mensajes por ventana
+const phoneRateMap = new Map();          // phone → { count, windowStart, warned }
+
+// Limpieza periódica de entradas expiradas para evitar memory leak
+setInterval(() => {
+  const now = Date.now();
+  for (const [phone, state] of phoneRateMap) {
+    if (now - state.windowStart > PHONE_RATE_WINDOW_MS) {
+      phoneRateMap.delete(phone);
+    }
+  }
+}, PHONE_RATE_WINDOW_MS);
+
+/**
+ * Devuelve:
+ *   'ok'      → dentro del límite, procesar normalmente
+ *   'warn'    → primer mensaje que excede el límite (enviar aviso al alumno)
+ *   'blocked' → sigue excediendo, ignorar silenciosamente
+ */
+function checkPhoneRate(phone) {
+  const now     = Date.now();
+  const state   = phoneRateMap.get(phone);
+
+  if (!state || now - state.windowStart > PHONE_RATE_WINDOW_MS) {
+    // Nueva ventana
+    phoneRateMap.set(phone, { count: 1, windowStart: now, warned: false });
+    return 'ok';
+  }
+
+  state.count++;
+
+  if (state.count <= PHONE_RATE_MAX) return 'ok';
+  if (!state.warned) {
+    state.warned = true;
+    console.warn(`[rate-limit] phone=${phone} excedió ${PHONE_RATE_MAX} msgs/min — enviando aviso`);
+    return 'warn';
+  }
+  console.warn(`[rate-limit] phone=${phone} bloqueado (spam continuo, count=${state.count})`);
+  return 'blocked';
 }
 
 // ── Códigos Meta de ventana de 24h expirada ───────────────────────────────────
@@ -131,7 +193,7 @@ async function sendCsatSurvey(phone, session) {
 }
 
 // ── Webhook de Chatwoot Agent Bot ─────────────────────────────────────────────
-app.post('/webhook/chatwoot', (req, res) => {
+app.post('/webhook/chatwoot', webhookLimiter, (req, res) => {
   res.sendStatus(200); // responder siempre 200 inmediato
 
   try {
@@ -178,6 +240,17 @@ app.post('/webhook/chatwoot', (req, res) => {
       }
 
       const phone = rawPhone.replace(/^\+/, '');
+
+      // ── Escudo 2: anti-spam por teléfono ──────────────────────────────────
+      const rateResult = checkPhoneRate(phone);
+      if (rateResult === 'warn') {
+        sendText(phone,
+          `Estás enviando mensajes muy rápido. Por favor, espera 1 minuto antes de continuar. ⏳`
+        ).catch(() => {});
+        return;
+      }
+      if (rateResult === 'blocked') return;
+
       const msg   = {
         id:                payload.id,
         content:           payload.content,
