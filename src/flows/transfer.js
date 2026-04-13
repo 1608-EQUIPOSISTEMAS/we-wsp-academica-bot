@@ -3,6 +3,7 @@ const { addPrivateNote, deactivateBot, updateLabels, assignTeam, unassignAgent, 
 const { updateSession }                                                     = require('../services/session');
 const { isWithinBusinessHours, getScheduleText }                            = require('../services/schedule');
 const { createSolicitud }                                                   = require('../services/database');
+const log                                                                   = require('../utils/logger');
 
 // ── Mapeo tema → equipo ───────────────────────────────────────────────────────
 const TEAM_ACADEMICO = process.env.CHATWOOT_TEAM_ACADEMICO;
@@ -87,6 +88,12 @@ function buildDbNotes(session, extraNote) {
 function applyLabelsAndAssign(convId, session, labels) {
   updateLabels(convId, { add: labels });
   const teamId = TOPIC_TEAM[session.ultimoTema] || TEAM_GENERAL;
+  log.info('transfer', 'Asignando equipo', {
+    convId: convId,
+    ultimoTema: session.ultimoTema,
+    teamId,
+    fallback: !TOPIC_TEAM[session.ultimoTema],
+  });
   assignTeam(convId, teamId);
   // Desasignar el bot como agente para que la conversación entre
   // limpia a la cola del equipo y una asesora pueda auto-asignársela.
