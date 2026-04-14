@@ -240,6 +240,18 @@ app.post('/webhook/chatwoot', webhookLimiter, (req, res) => {
     const payload = req.body;
     const event   = payload.event;
 
+    // ── Filtro de Inbox: ignorar eventos de otras bandejas ───────────────────
+    const INBOX_ID       = process.env.CHATWOOT_INBOX_ID ? Number(process.env.CHATWOOT_INBOX_ID) : null;
+    const payloadInboxId = payload?.inbox?.id;
+    if (INBOX_ID && payloadInboxId && payloadInboxId !== INBOX_ID) {
+      log.debug('webhook', 'Evento ignorado — inbox diferente', {
+        inboxEsperado: INBOX_ID,
+        inboxRecibido: payloadInboxId,
+        event,
+      });
+      return;
+    }
+
     // ── Mensaje nuevo del alumno ─────────────────────────────────────────────
     if (event === 'message_created') {
 
