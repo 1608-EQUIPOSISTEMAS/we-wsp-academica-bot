@@ -338,7 +338,7 @@ async function getStudentCronograma(studentId) {
      JOIN programs               p   ON p.program_id          = pv.program_id
      LEFT JOIN catalog           cat ON cat.catalog_id        = p.cat_type_program
      WHERE sp.student_id          = $1
-       AND sp.modality             = 'EN_VIVO'
+       AND sp.modality             IN ('EN_VIVO', 'PRESENCIAL')
        AND sp.program_edition_id  IS NOT NULL
        AND pe.active              = 'Y'
        AND (pe.start_date >= CURRENT_DATE - INTERVAL '3 months' OR pe.end_date >= CURRENT_DATE)

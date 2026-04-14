@@ -106,7 +106,9 @@ async function handleCronograma(phone, session) {
   if (!programs || programs.length === 0) {
     await sendText(
       phone,
-      `No encontramos programas En Vivo activos registrados en tu cuenta 😊\n\n` +
+      `No encontramos programas *Presenciales o En Vivo* activos en tu cuenta 😊\n\n` +
+      `_Solo se muestran programas de esta modalidad con actividad reciente. ` +
+      `Los cursos Online no aparecen aquí._\n\n` +
       `Si crees que hay un error o necesitas el cronograma de un programa específico, ` +
       `un asesor puede ayudarte.`
     );
@@ -133,8 +135,8 @@ async function handleCronograma(phone, session) {
 
   await sendList(
     phone,
-    'Mis Programas En Vivo',
-    `📅 Aquí están tus programas activos.\nSelecciona uno para ver el acceso a clases:`,
+    'Mis Programas',
+    `📅 Aquí están tus programas *Presenciales y En Vivo* activos.\n_Los cursos Online no aparecen aquí._\nSelecciona uno para ver el acceso a clases:`,
     'W|E Educación Ejecutiva',
     '📅 Ver mis programas',
     sections
