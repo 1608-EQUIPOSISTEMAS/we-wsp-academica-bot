@@ -497,10 +497,11 @@ async function route(phone, session, { text, buttonId, listId }) {
       return;
     }
 
-    // ── Certificación — flujo Rama A ────────────────────────────────────────
+    // ── Certificación — flujo Rama A y post-envío PDF ───────────────────────
     case 'flow_cert_modalidad':
     case 'flow_cert_plazo':
     case 'flow_cert_info':
+    case 'flow_cert_post_envio':
       if (id) return handleCertReply(phone, id, session);
       return;
 

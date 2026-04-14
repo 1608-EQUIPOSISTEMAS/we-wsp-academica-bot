@@ -379,7 +379,7 @@ async function fetchStudentCertificates(partnerId) {
         params: {
           model:  'issued.certificates',
           domain: [['partner_id', 'in', [partnerId]]],
-          fields: ['id', 'code', 'slide_channel_id', 'date_issue', 'state'],
+          fields: ['id', 'code', 'slide_channel_id', 'slide_group_id', 'date_issue', 'state'],
           order:  'date_issue desc',
         },
       },
@@ -395,6 +395,7 @@ async function fetchStudentCertificates(partnerId) {
       id:         r.id,
       code:       r.code || '',
       courseName: Array.isArray(r.slide_channel_id) ? r.slide_channel_id[1] : (r.slide_channel_id || ''),
+      isEnVivo:   Array.isArray(r.slide_group_id) && r.slide_group_id.length > 0,
       date:       r.date_issue || null,
       state:      r.state || '',
     }));

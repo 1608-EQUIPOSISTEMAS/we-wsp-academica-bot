@@ -88,13 +88,54 @@ function _formatCertDate(dateStr) {
   return `${day}/${month}/${d.getUTCFullYear()}`;
 }
 
+/** Prefijos que indican el tipo de programa y ensanchan el nombre innecesariamente. */
+const _CERT_PREFIXES = [
+  { re: /^Especialización\s+en\s+/i,      tipo: 'Especialización' },
+  { re: /^Especialista\s+en\s+/i,         tipo: 'Especialización' },
+  { re: /^Programa\s+de\s+Especialización\s+en\s+/i, tipo: 'Especialización' },
+  { re: /^Diplomado\s+en\s+/i,            tipo: 'Diplomado' },
+  { re: /^Diplomado\s+/i,                 tipo: 'Diplomado' },
+  { re: /^PEE\s+en\s+/i,                  tipo: 'PEE' },
+  { re: /^PEE\s+/i,                       tipo: 'PEE' },
+];
+
 /**
- * Construye el título de fila para un certificado de Odoo.
- * Limpia versiones (V1-V7) y trunca a 24 chars.
+ * Descompone el nombre de un certificado de Odoo en { shortTitle, tipo }.
+ * - Quita prefijos de tipo (Especialización en, Diplomado en, PEE…)
+ * - Elimina la palabra "Online" donde aparezca
+ * - Aplica _cleanVersion para sufijos V1-V7
+ * Si no hay prefijo detectado → tipo null (es un Curso)
  */
-function _buildCertTitle(courseName) {
-  const clean = _cleanVersion(courseName || 'Certificado');
-  return clean.length > 24 ? clean.slice(0, 21) + '...' : clean;
+function _parseCertName(courseName) {
+  const base = _cleanVersion(
+    (courseName || 'Certificado').replace(/\bonline\b/gi, '').replace(/\s{2,}/g, ' ').trim()
+  );
+  for (const { re, tipo } of _CERT_PREFIXES) {
+    if (re.test(base)) {
+      const shortTitle = base.replace(re, '').trim();
+      return { shortTitle, tipo };
+    }
+  }
+  return { shortTitle: base, tipo: null };
+}
+
+/** Trunca a 24 chars con "…" (límite de título de fila en WhatsApp). */
+function _truncate24(text) {
+  return text.length > 24 ? text.slice(0, 21) + '...' : text;
+}
+
+/**
+ * Construye { title, description } para una fila de certificado de Odoo.
+ * - title: nombre corto (sin prefijo de tipo), truncado a 24
+ * - description: tipo (si lo hay) · modalidad · fecha de emisión
+ */
+function _buildCertRow(cert) {
+  const { shortTitle, tipo } = _parseCertName(cert.courseName);
+  const title      = _truncate24(shortTitle);
+  const modalidad  = cert.isEnVivo ? '🏫 En Vivo' : '💻 Online';
+  const fechaStr   = cert.date ? `Emitido: ${_formatCertDate(cert.date)}` : null;
+  const description = [tipo, modalidad, fechaStr].filter(Boolean).join(' · ');
+  return { title, description: description || 'Sin fecha' };
 }
 
 // ── Entrada principal ─────────────────────────────────────────────────────────
@@ -164,11 +205,10 @@ async function _sendCertOdooList(phone, certs) {
   });
 
   // Máx 8 certs dinámicos → deja hueco para fila estática + "Buscar" si hay más
-  const rows = sorted.slice(0, 8).map(c => ({
-    id:          `cert_odoo_${c.id}`,
-    title:       _buildCertTitle(c.courseName),
-    description: c.date ? `Emitido: ${_formatCertDate(c.date)}` : 'Fecha no disponible',
-  }));
+  const rows = sorted.slice(0, 8).map(c => {
+    const { title, description } = _buildCertRow(c);
+    return { id: `cert_odoo_${c.id}`, title, description };
+  });
 
   // "Buscar" solo si hay más de 8 (ocupa el slot 9 antes de la estática)
   if (certs.length > 8) {
@@ -378,11 +418,10 @@ async function handleCertSearch(phone, keyword, session) {
 /** Muestra resultados de búsqueda para el flujo Odoo (IDs cert_odoo_*). */
 async function _sendCertOdooSearchResults(phone, keyword, results) {
   // Máx 8 resultados + fila estática = 9 (dejamos hueco de seguridad)
-  const rows = results.slice(0, 8).map(c => ({
-    id:          `cert_odoo_${c.id}`,
-    title:       _buildCertTitle(c.courseName),
-    description: c.date ? `Emitido: ${_formatCertDate(c.date)}` : 'Fecha no disponible',
-  }));
+  const rows = results.slice(0, 8).map(c => {
+    const { title, description } = _buildCertRow(c);
+    return { id: `cert_odoo_${c.id}`, title, description };
+  });
 
   // Si hay más resultados, opción de refinar
   if (results.length > 8) {
@@ -519,8 +558,18 @@ async function handleCertReply(phone, buttonId, session) {
           filename,
           `🎓 ¡Aquí tienes tu certificado! Felicitaciones por completar tu programa 🎉`
         );
-        updateSession(phone, { estado: 'resuelto_bot', resuelto_bot_at: Date.now() });
-        return showBotResuelto(phone);
+        updateSession(phone, { estado: 'flow_cert_post_envio', resuelto_bot_at: Date.now() });
+        await delay(500);
+        await sendButtons(
+          phone,
+          `¿Hay algo más en lo que pueda ayudarte? 😊`,
+          [
+            { id: 'cert_ver_mas',      title: '🎓 Ver más certificados' },
+            { id: 'bot_resuelto_menu', title: '📋 Ver menú' },
+            { id: 'bot_resuelto_no',   title: '✅ No, es todo' },
+          ]
+        );
+        return;
       } catch (err) {
         console.error('[certificados] Error enviando PDF por WhatsApp:', err.message);
         await sendText(
@@ -539,6 +588,17 @@ async function handleCertReply(phone, buttonId, session) {
       `Un asesor del equipo académico podrá darte más información 💙`
     );
     return runTransfer(phone, { ...session, ultimoTema: 'certificacion' });
+  }
+
+  // ── Ver más certificados (post-envío de PDF) ─────────────────────────────
+  if (buttonId === 'cert_ver_mas') {
+    const certs = session.certOptions || [];
+    if (certs.length > 0) {
+      updateSession(phone, { estado: 'flow_cert_programa' });
+      return _sendCertOdooList(phone, certs);
+    }
+    // Sin opciones en sesión → recargar desde Odoo
+    return _showCertProgramList(phone, session);
   }
 
   // ── Buscador ─────────────────────────────────────────────────────────────
