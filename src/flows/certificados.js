@@ -204,26 +204,17 @@ async function _sendCertOdooList(phone, certs) {
     return new Date(b.date) - new Date(a.date);
   });
 
-  // Máx 8 certs dinámicos → deja hueco para fila estática + "Buscar" si hay más
-  const rows = sorted.slice(0, 8).map(c => {
+  // Máx 9 certs dinámicos + 1 fila estática = 10 filas (límite WhatsApp)
+  const rows = sorted.slice(0, 9).map(c => {
     const { title, description } = _buildCertRow(c);
     return { id: `cert_odoo_${c.id}`, title, description };
   });
 
-  // "Buscar" solo si hay más de 8 (ocupa el slot 9 antes de la estática)
-  if (certs.length > 8) {
-    rows.push({
-      id:          'cert_buscar',
-      title:       '🔍 Buscar otro certificado',
-      description: 'Escribe el nombre del curso',
-    });
-  }
-
-  // Fila estática siempre al final (slot 9 o 10 según haya búsqueda)
+  // Fila estática siempre al final
   rows.push({
     id:          'cert_tipo_avanzado',
     title:       '🙋 No veo mi certificado',
-    description: 'Diplomados, PEE o faltantes',
+    description: 'Faltante, corrección o Diplomado/PEE',
   });
 
   await sendList(
@@ -417,22 +408,17 @@ async function handleCertSearch(phone, keyword, session) {
 
 /** Muestra resultados de búsqueda para el flujo Odoo (IDs cert_odoo_*). */
 async function _sendCertOdooSearchResults(phone, keyword, results) {
-  // Máx 8 resultados + fila estática = 9 (dejamos hueco de seguridad)
-  const rows = results.slice(0, 8).map(c => {
+  // Máx 9 resultados + fila estática = 10 filas (límite WhatsApp)
+  const rows = results.slice(0, 9).map(c => {
     const { title, description } = _buildCertRow(c);
     return { id: `cert_odoo_${c.id}`, title, description };
   });
-
-  // Si hay más resultados, opción de refinar
-  if (results.length > 8) {
-    rows.push({ id: 'cert_buscar', title: '🔍 Refinar búsqueda...', description: '' });
-  }
 
   // Siempre el salvavidas al final
   rows.push({
     id:          'cert_tipo_avanzado',
     title:       '🙋 No veo mi certificado',
-    description: 'Diplomados, PEE o faltantes',
+    description: 'Faltante, corrección o Diplomado/PEE',
   });
 
   await sendList(
@@ -564,7 +550,7 @@ async function handleCertReply(phone, buttonId, session) {
           phone,
           `¿Hay algo más en lo que pueda ayudarte? 😊`,
           [
-            { id: 'cert_ver_mas',      title: '🎓 Ver más certificados' },
+            { id: 'cert_ver_mas',      title: '🎓 Otro certificado' },
             { id: 'bot_resuelto_menu', title: '📋 Ver menú' },
             { id: 'bot_resuelto_no',   title: '✅ No, es todo' },
           ]

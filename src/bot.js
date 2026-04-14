@@ -112,6 +112,7 @@ const TEXT_TO_ID = {
   // ── Cierre bot (resuelto_bot) ────────────────────────────────────────────
   '✅ No, es todo':                        'bot_resuelto_no',
   '📋 Ver menú':                           'bot_resuelto_menu',
+  '🎓 Otro certificado':                   'cert_ver_mas',
   // ── Identificación ──────────────────────────────────────────────────────
   'Intentar otro correo':                  'reintentar_correo',
   'Hablar con un asesor':                  'hablar_asesor',
