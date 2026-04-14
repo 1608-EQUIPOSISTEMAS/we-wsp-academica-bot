@@ -104,6 +104,7 @@ const TEXT_TO_ID = {
   '❓ Tengo más dudas':                    'flex_mas_dudas',
   // ── Paginación de programas ──────────────────────────────────────────────
   '➕ Ver más programas':                  'prog_ver_mas',
+  '📋 Ver más programas':                  'crono_mas_cursos',
   '⬅️ Página anterior':                   'prog_anterior',
   // ── CSAT ────────────────────────────────────────────────────────────────
   '⭐ 1':                                  'csat_1',

@@ -62,11 +62,19 @@ function _buildRowDescription(p) {
   return `${numeroDia} ${nombreDia} | ${tipo}`;
 }
 
-/** Agrupa los programas por mes (clave "Mes Año") y genera las sections para sendList. */
-function _buildSections(programs) {
-  const byMonth = new Map();
+/**
+ * Agrupa los programas por mes y genera las sections para sendList.
+ * Garantiza que el total de rows en TODAS las sections ≤ 10.
+ * Si hasMore=true, añade una fila "Ver más cursos" al final de la última section.
+ */
+function _buildSections(programs, hasMore = false) {
+  // Con hasMore reservamos 1 slot para la fila extra → máx 9 programas reales
+  const MAX_ROWS    = 10;
+  const slots       = hasMore ? MAX_ROWS - 1 : MAX_ROWS;
+  const display     = programs.slice(0, slots);
 
-  for (const p of programs) {
+  const byMonth = new Map();
+  for (const p of display) {
     const d   = p.start_date ? new Date(p.start_date) : null;
     const key = d
       ? `${MESES_ES[d.getUTCMonth()]} ${d.getUTCFullYear()}`
@@ -77,16 +85,25 @@ function _buildSections(programs) {
 
   const sections = [];
   for (const [month, progs] of byMonth) {
-    if (sections.length >= 10) break; // límite WhatsApp: 10 sections
     sections.push({
       title: month,
-      rows:  progs.slice(0, 10).map(p => ({
+      rows:  progs.map(p => ({
         id:          `crono_${p.program_edition_id}`,
         title:       _buildRowTitle(p),
         description: _buildRowDescription(p),
       })),
     });
   }
+
+  // Fila "Ver más" en la última section si hay más programas de los que se muestran
+  if (hasMore && sections.length > 0) {
+    sections[sections.length - 1].rows.push({
+      id:          'crono_mas_cursos',
+      title:       '📋 Ver más programas',
+      description: 'Hablar con un asesor',
+    });
+  }
+
   return sections;
 }
 
@@ -124,6 +141,8 @@ async function handleCronograma(phone, session) {
     return;
   }
 
+  const hasMore = programs.length > 9;
+
   updateSession(phone, {
     estado:            'flow_cronograma',
     // Enriquecer cada programa con el título exacto renderizado en el menú,
@@ -131,7 +150,7 @@ async function handleCronograma(phone, session) {
     cronogramaOptions: programs.map(p => ({ ...p, renderedTitle: _buildRowTitle(p) })),
   });
 
-  const sections = _buildSections(programs);
+  const sections = _buildSections(programs, hasMore);
 
   await sendList(
     phone,
@@ -161,6 +180,19 @@ function _moduleIcon(index) {
 // ── Selección del alumno ──────────────────────────────────────────────────────
 
 async function handleCronogramaReply(phone, id, session) {
+  // ── Ver más cursos → transfer con contexto ──────────────────────────────
+  if (id === 'crono_mas_cursos') {
+    updateSession(phone, { ultimoTema: 'cronograma' });
+    await sendText(
+      phone,
+      `Tienes más programas activos de los que podemos mostrar en esta lista 😊\n` +
+      `Un asesor del equipo académico te enviará el cronograma completo 💙`
+    );
+    return runTransfer(phone, { ...session, ultimoTema: 'cronograma' },
+      'El alumno tiene más de 9 programas activos y solicitó ver el cronograma completo.'
+    );
+  }
+
   const editionId = parseInt(id.replace('crono_', ''), 10);
   const programs  = session.cronogramaOptions || [];
   const program   = programs.find(p => Number(p.program_edition_id) === editionId);
