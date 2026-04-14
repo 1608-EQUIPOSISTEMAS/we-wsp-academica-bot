@@ -1,10 +1,10 @@
-const { sendText, sendButtons }               = require('../services/whatsapp');
+const { sendText, sendButtons, delay }        = require('../services/whatsapp');
 const { updateSession, deleteSession }        = require('../services/session');
 const { setLabels, resolveConversation }      = require('../services/chatwoot');
 
 async function showBotResuelto(phone) {
   updateSession(phone, {
-    estado:         'resuelto_bot',
+    estado:          'resuelto_bot',
     resuelto_bot_at: Date.now(),
   });
   await sendButtons(
@@ -19,13 +19,18 @@ async function showBotResuelto(phone) {
 
 async function handleBotResuelto(phone, buttonId, session) {
   if (buttonId === 'bot_resuelto_no') {
-    await sendText(phone, `¡Perfecto! Que tengas un buen día 💙`);
-    if (session.conversationId) {
-      setLabels(session.conversationId, ['resuelto-bot']);
-      resolveConversation(session.conversationId);
-    }
-    deleteSession(phone);
-
+    // Antes de despedirnos, pedimos calificación del bot
+    updateSession(phone, { estado: 'flow_bot_csat' });
+    await delay(500);
+    await sendButtons(
+      phone,
+      `¡Genial! Para seguir mejorando, ¿qué tal te pareció mi atención automática hoy? 🤖`,
+      [
+        { id: 'bot_csat_good', title: '🟢 Excelente' },
+        { id: 'bot_csat_ok',   title: '🟡 Regular' },
+        { id: 'bot_csat_bad',  title: '🔴 Mejorable' },
+      ]
+    );
   } else {
     // bot_resuelto_menu o cualquier otra respuesta → menú principal
     const { showMenu } = require('./menu');

@@ -163,17 +163,17 @@ async function updateSolicitudStatus(ticketNumber, status) {
  * @param {string|null}   ticketNumber — Número de ticket relacionado (puede ser null)
  * @param {number}        rating       — Calificación 1-5
  */
-async function createCsat(convId, studentId, phone, ticketNumber, rating) {
+async function createCsat(convId, studentId, phone, ticketNumber, rating, resolvedByAgent = true) {
   const parsedConvId = parseInt(convId, 10);
   const convIdValue  = isNaN(parsedConvId) ? null : parsedConvId;
 
   const query = `
-    INSERT INTO csat_bot (conversation_id, student_id, phone, ticket_number, rating)
-    VALUES ($1, $2, $3, $4, $5)
+    INSERT INTO csat_bot (conversation_id, student_id, phone, ticket_number, rating, resolved_by_agent)
+    VALUES ($1, $2, $3, $4, $5, $6)
     RETURNING *
   `;
   const { rows } = await pool.query(query, [
-    convIdValue, studentId || null, phone || null, ticketNumber || null, rating,
+    convIdValue, studentId || null, phone || null, ticketNumber || null, rating, resolvedByAgent,
   ]);
   return rows[0];
 }

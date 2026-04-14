@@ -116,6 +116,10 @@ const TEXT_TO_ID = {
   '✅ No, es todo':                        'bot_resuelto_no',
   '📋 Ver menú':                           'bot_resuelto_menu',
   '🎓 Otro certificado':                   'cert_ver_mas',
+  // ── Micro-CSAT del bot ───────────────────────────────────────────────────
+  '🟢 Excelente':                          'bot_csat_good',
+  '🟡 Regular':                            'bot_csat_ok',
+  '🔴 Mejorable':                          'bot_csat_bad',
   // ── Identificación ──────────────────────────────────────────────────────
   'Intentar otro correo':                  'reintentar_correo',
   'Hablar con un asesor':                  'hablar_asesor',
@@ -361,6 +365,46 @@ async function route(phone, session, { text, buttonId, listId }) {
         return;
       }
       return; // ignorar cualquier otra respuesta
+    }
+
+    // ── Micro-CSAT del bot ────────────────────────────────────────────────
+    case 'flow_bot_csat': {
+      const BOT_CSAT_MAP = { bot_csat_good: 5, bot_csat_ok: 3, bot_csat_bad: 1 };
+      const rating = id && BOT_CSAT_MAP[id] !== undefined ? BOT_CSAT_MAP[id] : null;
+      if (rating === null) return; // ignorar mensajes que no sean los 3 botones
+
+      const labelMap = { bot_csat_good: 'bot-csat-bueno', bot_csat_ok: 'bot-csat-regular', bot_csat_bad: 'bot-csat-mejorable' };
+      const labelVal = labelMap[id];
+      const textoVal = { bot_csat_good: 'Excelente 🟢', bot_csat_ok: 'Regular 🟡', bot_csat_bad: 'Mejorable 🔴' }[id];
+
+      try {
+        await createCsat(
+          session.conversationId,
+          session.studentId || null,
+          phone,
+          null,    // bot no genera ticket
+          rating,
+          false    // resolved_by_agent = false → CSAT del bot
+        );
+      } catch (err) {
+        console.error('[bot-csat] Error guardando calificación:', err.message);
+      }
+
+      if (session.conversationId) {
+        addPrivateNote(
+          session.conversationId,
+          `📊 *CSAT Bot:* El alumno calificó la atención automática como: *${textoVal}*`
+        ).catch(() => {});
+        updateLabels(session.conversationId, { add: [labelVal, 'resuelto-bot'] }).catch(() => {});
+        resolveConversation(session.conversationId).catch(() => {});
+      }
+
+      await sendText(
+        phone,
+        `¡Gracias por tu respuesta! Tu opinión nos ayuda a mejorar 🙏\nQue tengas un excelente día 💙\n*W|E Educación Ejecutiva*`
+      );
+      deleteSession(phone);
+      return;
     }
 
     case 'esperando_correo':
