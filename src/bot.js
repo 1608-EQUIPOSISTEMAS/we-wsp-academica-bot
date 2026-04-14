@@ -68,6 +68,8 @@ const TEXT_TO_ID = {
   // ── Certificación — confirmación ────────────────────────────────────────
   '✅ Entendido':                          'cert_ok',
   '❓ Tengo otra duda':                    'cert_otra_duda',
+  '📋 No aparece mi cert':                 'cert_no_aparece',
+  '✏️ Corregir un dato':                  'cert_correccion',
   // ── Campus / Materiales ──────────────────────────────────────────────────
   '✅ Ya tengo acceso':                    'mat_ok',
   // ── Instaladores — selector de programa ────────────────────────────────
@@ -503,6 +505,8 @@ async function route(phone, session, { text, buttonId, listId }) {
     case 'flow_cert_plazo':
     case 'flow_cert_info':
     case 'flow_cert_post_envio':
+      if (id === 'bot_resuelto_no' || id === 'bot_resuelto_menu')
+        return handleBotResuelto(phone, id, session);
       if (id) return handleCertReply(phone, id, session);
       return;
 

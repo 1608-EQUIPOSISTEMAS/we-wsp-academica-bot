@@ -435,37 +435,41 @@ async function _sendCertOdooSearchResults(phone, keyword, results) {
 
 async function handleCertReply(phone, buttonId, session) {
 
-  // ── Paso 7: Diplomados / PEE / Especializaciones → contexto primero ────
+  // ── "No veo mi certificado" → bifurcación: faltante/corrección ──────────
   if (buttonId === 'cert_tipo_avanzado') {
+    updateSession(phone, { estado: 'flow_cert_avanzado' });
+    await delay(500);
+    await sendButtons(
+      phone,
+      `Entendido 😊 ¿Qué necesitas?`,
+      [
+        { id: 'cert_no_aparece',  title: '📋 No aparece mi cert' },
+        { id: 'cert_correccion',  title: '✏️ Corregir un dato' },
+      ]
+    );
+    return;
+  }
+
+  // ── No aparece → lista de programas del alumno ───────────────────────────
+  if (buttonId === 'cert_no_aparece') {
     let programs = [];
     try {
-      const all = await getAllStudentPrograms(session.studentId);
-      programs  = all.filter(p => {
-        const tipo = _deduceTipo(p.program_name);
-        return tipo === 'Diplomado' || tipo === 'PEE' || tipo === 'Especialización';
-      });
+      programs = await getAllStudentPrograms(session.studentId);
     } catch (err) {
-      console.error('[certificados] Error consultando programas avanzados:', err.message);
+      console.error('[certificados] Error consultando programas:', err.message);
     }
 
     if (programs.length === 0) {
-      // Sin programas en BD → transferir directo con texto explicativo
       await sendText(
         phone,
-        `🎓 Los certificados de *Diplomados, PEE y Especializaciones* requieren una revisión académica manual.\n\n` +
-        `Esto se debe a que se validan convalidaciones, módulos completados y nota integradora antes de emitirlos.\n\n` +
-        `Un asesor del equipo académico revisará tu caso y te lo enviará 💙`
+        `No encontramos programas registrados en tu cuenta 😔\n\n` +
+        `Un asesor del equipo académico revisará tu caso y te ayudará 💙`
       );
       return runTransfer(phone, { ...session, ultimoTema: 'certificacion_avanzada' });
     }
 
-    // Enriquecer con renderedTitle exacto antes de guardar en sesión
     const programsWithTitle = programs.map(p => ({ ...p, renderedTitle: _buildRowTitle(p) }));
-
-    updateSession(phone, {
-      estado:              'flow_cert_avanzado',
-      certAvanzadoOptions: programsWithTitle,
-    });
+    updateSession(phone, { certAvanzadoOptions: programsWithTitle });
 
     const rows = programsWithTitle.slice(0, 9).map((p, i) => ({
       id:          `cert_avanzado_${i}`,
@@ -475,30 +479,40 @@ async function handleCertReply(phone, buttonId, session) {
     rows.push({
       id:          'cert_avanzado_otro',
       title:       '🔍 Otro / No aparece',
-      description: 'Consultar por un programa antiguo',
+      description: 'Programa antiguo o no listado',
     });
 
     await sendList(
       phone,
-      'Certificado Final',
-      `¿Para cuál de tus programas necesitas el certificado final? 🎓`,
+      'Mis Programas',
+      `¿Para cuál de tus programas necesitas el certificado? 🎓`,
       'W|E Educación Ejecutiva',
       '🎓 Ver programas',
-      [{ title: 'Certificados Especiales', rows }]
+      [{ title: 'Tus programas', rows }]
     );
     return;
   }
 
+  // ── Corrección → transfer directo ────────────────────────────────────────
+  if (buttonId === 'cert_correccion') {
+    if (session.conversationId) {
+      addPrivateNote(
+        session.conversationId,
+        `✏️ *Solicitud de corrección de certificado:* El alumno indica que hay un dato incorrecto en su certificado.`
+      ).catch(err => console.error('[certificados] Error nota corrección:', err));
+    }
+    await sendText(
+      phone,
+      `Entendido 😊 Un asesor del equipo académico revisará los datos de tu certificado y te contactará para coordinar la corrección 💙`
+    );
+    return runTransfer(phone, { ...session, ultimoTema: 'reclamo_certificado' });
+  }
+
   // ── Nuevo handler: selección dentro de cert_avanzado_* ───────────────────
   if (buttonId?.startsWith('cert_avanzado_')) {
-    const TRANSFER_MSG =
-      `🎓 Los certificados de *Diplomados, PEE y Especializaciones* requieren una revisión académica manual.\n\n` +
-      `Esto se debe a que se validan convalidaciones, módulos completados y nota integradora antes de emitirlos.\n\n` +
-      `Un asesor del equipo académico revisará tu caso y te lo enviará 💙`;
-
     let notaPrograma;
     if (buttonId === 'cert_avanzado_otro') {
-      notaPrograma = 'No especificado en BD (Seleccionó "Otro")';
+      notaPrograma = 'No especificado (seleccionó "Otro / No aparece")';
     } else {
       const idx     = parseInt(buttonId.replace('cert_avanzado_', ''), 10);
       const program = (session.certAvanzadoOptions || [])[idx];
@@ -508,11 +522,14 @@ async function handleCertReply(phone, buttonId, session) {
     if (session.conversationId) {
       addPrivateNote(
         session.conversationId,
-        `📋 *Solicitud de revisión:* El alumno reporta que no visualiza su certificado (Posible Diplomado/PEE o error en emisión).\nPrograma indicado: ${notaPrograma}`
+        `📋 *Certificado no encontrado:* El alumno indica que no visualiza su certificado.\nPrograma indicado: ${notaPrograma}`
       ).catch(err => console.error('[certificados] Error nota privada cert avanzado:', err));
     }
 
-    await sendText(phone, TRANSFER_MSG);
+    await sendText(
+      phone,
+      `Entendido 😊 Un asesor del equipo académico revisará el estado de tu certificado y se comunicará contigo a la brevedad 💙`
+    );
     return runTransfer(phone, { ...session, ultimoTema: 'certificacion_avanzada' });
   }
 
