@@ -45,11 +45,15 @@ const TEXT_TO_ID = {
   '🖥️ Campus y Materiales':               'campus_materiales',
   '💻 Campus y Materiales':               'campus_materiales',
   '📅 Cronograma':                         'cronograma',
-  '📝 Exámenes Int.':                      'examenes_int',
-  '🏅 Certificación':                      'certificacion',
-  '📄 Justificaciones':                    'justificaciones',
+  '📝 Exámenes Internac.':                 'examenes_int',
+  '📝 Exámenes Int.':                      'examenes_int',   // fallback título viejo
+  '🎓 Certificación':                      'certificacion',
+  '🏅 Certificación':                      'certificacion',  // fallback título viejo
+  '⚠️ Justificaciones':                   'justificaciones',
+  '📄 Justificaciones':                    'justificaciones', // fallback título viejo
   '⚡ Alumno Flex':                        'alumno_flex',
-  '💻 Instaladores':                       'instaladores',
+  '⚙️ Instaladores':                      'instaladores',
+  '💻 Instaladores':                       'instaladores',   // fallback título viejo
   // ── Submenú Pagos y Facturación ─────────────────────────────────────────
   '📊 Estado de Cuenta':                   'estado_cuenta',
   '🧾 Enviar Comprobante':                 'enviar_comprobante',
@@ -71,6 +75,12 @@ const TEXT_TO_ID = {
   '❓ Tengo otra duda':                    'cert_otra_duda',
   '📋 No aparece mi cert':                 'cert_no_aparece',
   '✏️ Corregir un dato':                  'cert_correccion',
+  // ── Certificación — filas de lista ──────────────────────────────────────
+  '🙋 No veo mi certificado':              'cert_tipo_avanzado',
+  '🔍 Buscar de nuevo':                    'cert_buscar',
+  '🔍 Buscar otro programa...':            'cert_buscar',
+  '🔍 Refinar búsqueda...':               'cert_buscar',
+  '🔍 Otro / No aparece':                 'cert_avanzado_otro',
   // ── Campus / Materiales ──────────────────────────────────────────────────
   '✅ Ya tengo acceso':                    'mat_ok',
   '✅ Pude ingresar bien':                 'mat_ok',
