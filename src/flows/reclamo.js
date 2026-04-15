@@ -32,7 +32,7 @@ async function askReclamoDatos(phone, label, preMessage = null) {
 
   await sendText(
     phone,
-    `Para agilizar tu atención, ¿podrías indicarnos tu *nombre completo* y el *nombre de tu curso*?`
+    `Para ayudarte más rápido, ¿podrías indicarnos tu *nombre completo* y el *nombre de tu curso*?`
   );
 }
 

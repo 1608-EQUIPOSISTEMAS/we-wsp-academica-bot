@@ -16,7 +16,7 @@ async function showCampus(phone, session) {
     `¡Claro que sí! Todo tu material de estudio y las clases grabadas te esperan en el Campus Virtual 📚\n\n` +
     `🔗 Puedes ingresar desde aquí: https://we-educacion.com/web/login\n\n` +
     `• Usuario: *${usuario}*\n` +
-    `• Contraseña: *1234567*`
+    `🔑 *Tip de acceso:* Si es tu primera vez o nunca cambiaste tu clave, suele ser *1234567* o tu número de documento.`
   );
 
   await delay(1500);

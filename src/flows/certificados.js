@@ -310,7 +310,7 @@ async function _handleCertProgramSelected(phone, index, session) {
     );
   } catch (err) {
     console.error('[certificados] Error creando solicitud:', err.message);
-    await sendText(phone, '⚠️ No pudimos registrar tu caso en este momento. Un asesor te contactará.');
+    await sendText(phone, '⚠️ No pudimos registrar tu caso en este momento. Uno de mis compañeros del equipo humano te escribirá por aquí.');
     await runTransfer(phone, { ...session, ultimoTema: 'certificacion' });
     return;
   }
@@ -323,7 +323,7 @@ async function _handleCertProgramSelected(phone, index, session) {
       `Aún no has generado tu certificado para este programa o está en proceso 📋\n\n` +
       `🎫 *Número de ticket: ${solicitud.ticket_number}*\n` +
       `📄 Programa: *${program.program_name}*\n\n` +
-      `Un asesor del equipo académico revisará tu caso y se comunicará contigo a la brevedad 💙\n` +
+      `Uno de mis compañeros del equipo humano te escribirá por aquí a la brevedad 💙\n` +
       `⏱️ Tiempo estimado: 15 minutos`
     );
     await runTransfer(
@@ -463,7 +463,7 @@ async function handleCertReply(phone, buttonId, session) {
       await sendText(
         phone,
         `No encontramos programas registrados en tu cuenta 😔\n\n` +
-        `Un asesor del equipo académico revisará tu caso y te ayudará 💙`
+        `Uno de mis compañeros del equipo humano te escribirá por aquí para ayudarte 💙`
       );
       return runTransfer(phone, { ...session, ultimoTema: 'certificacion_avanzada' });
     }
@@ -561,7 +561,7 @@ async function handleCertReply(phone, buttonId, session) {
           phone,
           base64,
           filename,
-          `🎓 ¡Aquí tienes tu certificado! Felicitaciones por completar tu programa 🎉`
+          `📄 Certificado`
         );
         updateSession(phone, { estado: 'flow_cert_post_envio', resuelto_bot_at: Date.now() });
         await delay(2500);
@@ -686,7 +686,7 @@ async function handleCertReply(phone, buttonId, session) {
     await askReclamoDatos(
       phone,
       'reclamo_certificado',
-      `Lamentamos el inconveniente 😔 Vamos a revisar tu caso de inmediato.\nUn asesor te atenderá en breve 💙`
+      `Lamentamos el inconveniente 😔 Vamos a revisar tu caso de inmediato.\nUno de mis compañeros del equipo humano te escribirá por aquí en breve 💙`
     );
 
   // ── Confirmaciones finales ───────────────────────────────────────────────

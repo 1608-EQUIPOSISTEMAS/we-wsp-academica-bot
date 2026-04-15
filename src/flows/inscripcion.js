@@ -25,18 +25,20 @@ async function showInscripcion(phone, session) {
       { id: 'insc_menu',       title: '🏠 Menú principal' },
     ]);
   } else {
+    const salesPhone = process.env.PHONE_SALES || '51999606366';
+    const salesName  = process.env.NAME_SALES  || 'nuestra asesora';
+    const waUrl      = `https://wa.me/${salesPhone}?text=Hola%2C%20soy%20alumno%20de%20W%7CE%20Educaci%C3%B3n%20Ejecutiva%20y%20quisiera%20recibir%20asesor%C3%ADa%20sobre%20inscripci%C3%B3n%20a%20un%20programa%20%F0%9F%98%8A`;
     await sendText(
       phone,
-      `Para que te asesoren en todas tus consultas y dudas, te comparto el número de una Asesora Experta 👩‍💻\n` +
-      `📌 *Arleth* (asesora comercial)\n` +
-      `👉 +51 999 606 366`
+      `Para orientarte con tu inscripción, te conectaré con ${salesName} de nuestro equipo 👩‍💻\n` +
+      `📌 *+${salesPhone}*`
     );
     await delay(500);
     await sendCtaUrl(
       phone,
-      `Para asesorarte con tu inscripción, contáctate con nuestra asesora experta 👩‍💻`,
-      `Contactar a Arleth`,
-      `https://wa.me/51999606366?text=Hola%20Arleth%2C%20soy%20alumno%20de%20W%7CE%20Educaci%C3%B3n%20Ejecutiva%20y%20quisiera%20recibir%20asesor%C3%ADa%20sobre%20inscripci%C3%B3n%20a%20un%20programa%20%F0%9F%98%8A`
+      `Toca el botón para escribirle directamente por WhatsApp 👇`,
+      `Contactar asesor`,
+      waUrl
     );
     await delay(500);
     await sendButtons(phone, `¿Necesitas algo más?`, [
@@ -52,9 +54,7 @@ async function handleInscripcionReply(phone, id, session) {
     case 'insc_registrado':
       await sendText(
         phone,
-        `¡Perfecto! 🎉 Tu registro fue enviado.\n` +
-        `El equipo académico revisará tu solicitud\n` +
-        `y te confirmará en breve 💙`
+        `¡Listo! Ya le pasé tu solicitud al equipo académico para que la revisen. Te avisaremos por aquí apenas tengamos novedades. 📝`
       );
       return showMenu(phone, session.nombre);
 

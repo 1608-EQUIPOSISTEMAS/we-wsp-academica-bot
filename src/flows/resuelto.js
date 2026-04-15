@@ -9,7 +9,7 @@ async function showBotResuelto(phone) {
   });
   await sendButtons(
     phone,
-    `¿Hay algo más en lo que pueda ayudarte? 😊`,
+    `Tómate tu tiempo. Si necesitas ayuda con otra cosa, por aquí sigo. 👇`,
     [
       { id: 'bot_resuelto_no',   title: '✅ No, es todo' },
       { id: 'bot_resuelto_menu', title: '📋 Ver menú' },

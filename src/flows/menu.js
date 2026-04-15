@@ -7,7 +7,7 @@ async function showMenu(phone, nombre) {
   updateSession(phone, { estado: 'flow_menu_principal' });
   await sendButtons(
     phone,
-    `Hola ${nombre} 👋 ¿En qué podemos ayudarte hoy?`,
+    `¿En qué más puedo ayudarte? 😊`,
     [
       { id: 'menu_academico', title: '📚 Académico' },
       { id: 'menu_pagos',     title: '💳 Pagos' },
@@ -22,16 +22,16 @@ async function showMenuAcademico(phone) {
   await sendList(
     phone,
     '📚 Área Académica',
-    '¡Perfecto! Aquí tienes las opciones para gestionar tu cursada. Selecciona la que mejor describa tu consulta. 👇',
+    'Aquí tienes las opciones para gestionar tu cursada. Selecciona la que mejor describa tu consulta. 👇',
     'Siempre puedes elegir \'Menú principal\' para volver atrás.',
     'Ver opciones',
     [{
       title: 'Académico y Gestión',
       rows: [
-        { id: 'campus_materiales', title: '💻 Campus y Materiales', description: 'Acceso a clases grabadas, aula virtual y material de estudio.' },
-        { id: 'cronograma',        title: '📅 Cronograma',           description: 'Consulta las fechas de inicio, feriados y calendario de tu programa.' },
-        { id: 'examenes_int',      title: '📝 Exámenes Internac.',   description: 'Información sobre simulacros y rendición de certificaciones globales.' },
-        { id: 'certificacion',     title: '🎓 Certificación',        description: 'Revisa el estado de tu trámite, tiempos de entrega y requisitos.' },
+        { id: 'campus_materiales', title: '💻 Campus y Materiales', description: 'Encuentra el enlace directo para acceder a tus clases y recursos.' },
+        { id: 'cronograma',        title: '📅 Cronograma',           description: 'Revisa los módulos activos y las fechas de inicio de tus programas.' },
+        { id: 'examenes_int',      title: '📝 Exámenes Internac.',   description: 'Inicia el trámite para rendir tu examen de certificación global.' },
+        { id: 'certificacion',     title: '🎓 Certificación',        description: 'Descarga tus diplomas emitidos o reporta inconvenientes con tus documentos.' },
         { id: 'justificaciones',   title: '⚠️ Justificaciones',      description: 'Reporta inasistencias o solicita prórrogas por motivos de fuerza mayor.' },
         { id: 'alumno_flex',       title: '⚡ Alumno Flex',          description: 'Consulta las condiciones y beneficios de la modalidad de estudio flexible.' },
         { id: 'inscribirme',       title: '➕ Inscribirme',          description: 'Conoce nuestra oferta académica y anótate a un nuevo programa.' },
@@ -47,10 +47,10 @@ async function showMenuPagos(phone) {
   updateSession(phone, { estado: 'menu' });
   await sendList(
     phone,
-    'Pagos y Facturación',
-    '¿Qué necesitas?',
-    'Selecciona una opción',
-    '📋 Ver opciones',
+    '💳 Área de Pagos',
+    'Aquí puedes gestionar todo lo relacionado con tus cuotas y facturación. ¿En qué te puedo ayudar hoy? 👇',
+    'W|E Educación Ejecutiva',
+    'Ver opciones',
     [{
       title: 'Pagos y Facturación',
       rows: [
@@ -80,4 +80,4 @@ async function handleMenuPrincipalReply(phone, input, session) {
   if (buttonId === 'hablar_asesor')  return runTransfer(phone, session);
 }
 
-module.exports = { showMenu, showMenuPagos, handleMenuPrincipalReply };
+module.exports = { showMenu, showMenuAcademico, showMenuPagos, handleMenuPrincipalReply };

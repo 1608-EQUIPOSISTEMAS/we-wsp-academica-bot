@@ -87,7 +87,7 @@ async function _registrarFalloCorreo(phone, session) {
     await sendText(
       phone,
       `Parece que estás teniendo dificultades para ingresar tu correo 😊\n` +
-      `Un asesor te ayudará directamente.`
+      `Uno de mis compañeros del equipo humano te escribirá por aquí para ayudarte directamente.`
     );
     updateSession(phone, { ultimoTema: 'correo_no_encontrado' });
     await runTransfer(phone, { ...session, ultimoTema: 'correo_no_encontrado' });
@@ -135,8 +135,8 @@ async function handleCorreo(phone, email, session) {
       console.error('[identificacion] Error sync Odoo:', err.message);
       await sendText(
         phone,
-        `Estamos experimentando demoras técnicas en la validación de tu historial.\n` +
-        `Por favor, intenta de nuevo en unos minutos.`
+        `Uy, parece que nuestro sistema está tomando una pequeña siesta 😴 Estamos teniendo un contratiempo técnico, pero en unos minutos debería resolverse.\n` +
+        `Por favor, intenta de nuevo en un momento.`
       );
       return;
     }

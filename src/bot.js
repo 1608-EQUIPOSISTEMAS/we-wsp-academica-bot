@@ -7,7 +7,7 @@ const { sendText, sendTextDirect, sendButtons, sendList } = require('./services/
 const { buildProgramRows, PAGE_SIZE }     = require('./utils/programList');
 const { detectIntent }            = require('./services/ai');
 const { runTransfer }             = require('./flows/transfer');
-const { showMenu, showMenuPagos, handleMenuPrincipalReply } = require('./flows/menu');
+const { showMenu, showMenuAcademico, showMenuPagos, handleMenuPrincipalReply } = require('./flows/menu');
 const {
   startIdentificacion,
   handleCorreo,
@@ -319,8 +319,8 @@ async function handleIncoming(conversationId, phone, msg) {
     try {
       await sendTextDirect(
         phone,
-        `Ups, estamos experimentando intermitencias técnicas 🛠️\n` +
-        `Te estoy transfiriendo inmediatamente con un asesor para que te ayude.`
+        `Uy, parece que nuestro sistema está tomando una pequeña siesta 😴 Estamos teniendo un contratiempo técnico.\n` +
+        `Te estoy conectando con uno de mis compañeros del equipo humano para que te ayude.`
       );
     } catch (sendErr) {
       console.error('[emergencia] No se pudo enviar aviso al usuario:', sendErr.message);
@@ -731,6 +731,9 @@ async function handleMenuOption(phone, optionId, session) {
     case 'inscripcion':       return showInscripcion(phone, session);
     case 'examenes_int':      return showExamenes(phone);
 
+    case 'menu_academico':
+      return showMenuAcademico(phone, session);
+
     case 'menu_pagos':
       return showMenuPagos(phone);
 
@@ -824,7 +827,7 @@ async function handleFreeText(phone, text, session) {
     return askReclamoDatos(
       phone,
       'reclamo_certificado',
-      `Lamentamos el inconveniente 😔 Vamos a revisar tu caso de inmediato.\nUn asesor te atenderá en breve 💙`
+      `Lamentamos el inconveniente 😔 Vamos a revisar tu caso de inmediato.\nUno de mis compañeros del equipo humano te escribirá por aquí en breve 💙`
     );
   }
 

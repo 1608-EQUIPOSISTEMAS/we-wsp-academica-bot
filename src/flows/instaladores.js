@@ -35,7 +35,7 @@ async function askLaptopType(phone, label) {
   });
   await sendButtons(
     phone,
-    `Para agilizar tu atención, ¿usas laptop personal o corporativa?`,
+    `Para ayudarte más rápido, ¿usas laptop personal o corporativa?`,
     [
       { id: 'inst_laptop_personal', title: '💻 Personal' },
       { id: 'inst_laptop_corp',     title: '🏢 Corporativa' },
