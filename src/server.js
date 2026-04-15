@@ -191,22 +191,63 @@ async function sendSimpleGoodbye(phone) {
   }
 }
 
+/**
+ * Hand-back al bot tras resolución manual por asesor.
+ * Si la sesión existe y tiene correo (alumno identificado) → vuelve al menú.
+ * Si no hay sesión o no hay correo → deleteSession (usuario anónimo, bot arranca de cero).
+ */
+async function _handBackToBot(phone, session) {
+  if (!session?.correo) {
+    // Sin identificación previa → no tiene sentido volver al menú, limpiar
+    deleteSession(phone);
+    return;
+  }
+
+  updateSession(phone, {
+    en_atencion_humana:         false,
+    fuera_de_horario:           false,
+    estado:                     'menu',
+    transfer_replies:           0,
+    asesor_respondio:           false,
+    asesor_inactivity_msg_sent: false,
+    transfer_wait_msg_sent:     false,
+  });
+
+  try {
+    const { showMenu } = require('./flows/menu');
+    await sendText(
+      phone,
+      `¡Espero que nuestro equipo te haya sido de gran ayuda! ✨ Si necesitas algo más, aquí sigo disponible para ti.`
+    );
+    await showMenu(phone, session.nombre);
+    log.info('webhook', 'Hand-back al bot completado', { phone });
+  } catch (err) {
+    if (!isWindowExpiredError(err)) {
+      log.error('webhook', 'Error en hand-back al bot', {
+        phone, error: err.response?.data || err.message,
+      });
+    }
+    // Si falla el envío (ventana cerrada, etc.) limpiamos la sesión
+    deleteSession(phone);
+  }
+}
+
 async function sendCsatSurvey(phone, session) {
   try {
     await sendList(
       phone,
-      'Encuesta de satisfacción',
-      '¿Cómo calificarías tu atención hoy? 😊\nPor favor selecciona una opción:',
+      '📊 Encuesta de calidad',
+      'Para W|E Educación Ejecutiva tu opinión es clave. ¿Cómo calificarías la atención que te brindó nuestro asesor hoy? 🌟',
       'W|E Educación Ejecutiva',
       'Ver opciones',
       [{
         title: 'Calificación',
         rows: [
-          { id: 'csat_1', title: '⭐ 1',         description: 'Muy malo' },
-          { id: 'csat_2', title: '⭐⭐ 2',       description: 'Malo' },
-          { id: 'csat_3', title: '⭐⭐⭐ 3',     description: 'Regular' },
-          { id: 'csat_4', title: '⭐⭐⭐⭐ 4',   description: 'Bueno' },
-          { id: 'csat_5', title: '⭐⭐⭐⭐⭐ 5', description: 'Excelente' },
+          { id: 'csat_5', title: '⭐⭐⭐⭐⭐', description: 'Excelente' },
+          { id: 'csat_4', title: '⭐⭐⭐⭐',   description: 'Buena' },
+          { id: 'csat_3', title: '⭐⭐⭐',     description: 'Regular' },
+          { id: 'csat_2', title: '⭐⭐',       description: 'Mala' },
+          { id: 'csat_1', title: '⭐',         description: 'Muy mala' },
         ],
       }]
     );
@@ -365,7 +406,7 @@ app.post('/webhook/chatwoot', webhookLimiter, (req, res) => {
       if (session?.resolved_by === 'inactivity') {
         sendSimpleGoodbye(phone).finally(() => deleteSession(phone));
       } else {
-        deleteSession(phone);
+        _handBackToBot(phone, session);
       }
       return;
     }
@@ -392,7 +433,7 @@ app.post('/webhook/chatwoot', webhookLimiter, (req, res) => {
       if (session?.resolved_by === 'inactivity') {
         sendSimpleGoodbye(phone).finally(() => deleteSession(phone));
       } else {
-        deleteSession(phone);
+        _handBackToBot(phone, session);
       }
       return;
     }

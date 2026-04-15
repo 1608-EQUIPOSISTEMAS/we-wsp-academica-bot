@@ -42,7 +42,8 @@ const TEXT_TO_ID = {
   '💳 Pagos':                              'menu_pagos',
   '💬 Con un asesor':                      'hablar_asesor',
   // ── Submenú Académico y Gestión ─────────────────────────────────────────
-  '🖥️ Campus y Materiales':               'materiales',
+  '🖥️ Campus y Materiales':               'campus_materiales',
+  '💻 Campus y Materiales':               'campus_materiales',
   '📅 Cronograma':                         'cronograma',
   '📝 Exámenes Int.':                      'examenes_int',
   '🏅 Certificación':                      'certificacion',
@@ -72,6 +73,7 @@ const TEXT_TO_ID = {
   '✏️ Corregir un dato':                  'cert_correccion',
   // ── Campus / Materiales ──────────────────────────────────────────────────
   '✅ Ya tengo acceso':                    'mat_ok',
+  '✅ Pude ingresar bien':                 'mat_ok',
   // ── Instaladores — selector de programa ────────────────────────────────
   'SAP HANA':                              'inst_hana',
   'SAP R/3':                               'inst_r3',
@@ -89,24 +91,36 @@ const TEXT_TO_ID = {
   '💻 Personal':                           'inst_laptop_personal',
   '🏢 Corporativa':                        'inst_laptop_corp',
   // ── Inscripción ─────────────────────────────────────────────────────────
-  '📝 Inscribirme':                        'inscripcion',
+  '📝 Inscribirme':                        'inscribirme',
+  '➕ Inscribirme':                        'inscribirme',
   '✅ Ya me registré':                     'insc_registrado',
   '❓ Tengo una duda':                     'insc_duda',
   '🏠 Menú principal':                     'insc_menu',
   // ── Justificaciones ──────────────────────────────────────────────────────
   '✅ Listo, ya llené':                    'just_listo',
+  '✅ Ya lo completé':                     'just_listo',
   // ── Exámenes Internacionales ─────────────────────────────────────────────
   '✅ Llené el form':                      'exam_formulario_ok',
+  '✅ Ya lo completé':                     'exam_formulario_ok',
+  '🆘 Necesito ayuda':                    'form_problemas',
   // ── Compartido: flujos con formulario Google ─────────────────────────────
   '⚠️ Tengo problemas':                   'form_problemas',
+  '🆘 Tengo problemas':                   'form_problemas',
   // ── Alumno Flex ──────────────────────────────────────────────────────────
   '✅ Ya llené el form':                   'flex_form_lleno',
+  '✅ Ya me inscribí':                     'flex_form_lleno',
   '❓ Tengo más dudas':                    'flex_mas_dudas',
   // ── Paginación de programas ──────────────────────────────────────────────
   '➕ Ver más programas':                  'prog_ver_mas',
   '📋 Ver más programas':                  'crono_mas_cursos',
   '⬅️ Página anterior':                   'prog_anterior',
   // ── CSAT ────────────────────────────────────────────────────────────────
+  '⭐':                                    'csat_1',
+  '⭐⭐':                                  'csat_2',
+  '⭐⭐⭐':                                'csat_3',
+  '⭐⭐⭐⭐':                              'csat_4',
+  '⭐⭐⭐⭐⭐':                            'csat_5',
+  // Fallback títulos viejos (por si hay sesiones en curso)
   '⭐ 1':                                  'csat_1',
   '⭐⭐ 2':                                'csat_2',
   '⭐⭐⭐ 3':                              'csat_3',
@@ -114,7 +128,9 @@ const TEXT_TO_ID = {
   '⭐⭐⭐⭐⭐ 5':                          'csat_5',
   // ── Cierre bot (resuelto_bot) ────────────────────────────────────────────
   '✅ No, es todo':                        'bot_resuelto_no',
+  '✅ No, eso es todo':                    'bot_resuelto_no',
   '📋 Ver menú':                           'bot_resuelto_menu',
+  '🔙 Volver al menú':                    'volver_menu',
   '🎓 Otro certificado':                   'cert_ver_mas',
   // ── Micro-CSAT del bot ───────────────────────────────────────────────────
   '🟢 Excelente':                          'bot_csat_good',
@@ -401,7 +417,7 @@ async function route(phone, session, { text, buttonId, listId }) {
 
       await sendText(
         phone,
-        `¡Gracias por tu respuesta! Tu opinión nos ayuda a mejorar 🙏\nQue tengas un excelente día 💙\n*W|E Educación Ejecutiva*`
+        `¡Gracias por tu calificación! 💙 Tomamos nota para seguir mejorando. ¡Que tengas un excelente día!`
       );
       deleteSession(phone);
       return;
@@ -707,9 +723,11 @@ async function handleMenuOption(phone, optionId, session) {
     case 'campus_virtual':    return showCampus(phone, session);
     case 'certificacion':     return showCertificados(phone, session);
     case 'justificaciones':   return showJustificaciones(phone, session);
+    case 'campus_materiales':
     case 'materiales':        return showMateriales(phone, optionId);
     case 'instaladores':      return showInstaladores(phone);
     case 'alumno_flex':       return showAlumnoFlex(phone, session);
+    case 'inscribirme':
     case 'inscripcion':       return showInscripcion(phone, session);
     case 'examenes_int':      return showExamenes(phone);
 
@@ -833,9 +851,7 @@ async function handleCsatReply(phone, rating, session) {
 
   await sendText(
     phone,
-    `¡Gracias por tu calificación! 🙏\n` +
-    `Que tengas un excelente día 💙\n` +
-    `*W|E Educación Ejecutiva*`
+    `¡Gracias por tu calificación! 💙 Tomamos nota para seguir mejorando. ¡Que tengas un excelente día!`
   );
 
   // Marcar como completado (conservando etiquetas del ticket) y cerrar conversación

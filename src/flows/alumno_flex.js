@@ -4,31 +4,37 @@ const { tagFlow }                      = require('../services/chatwoot');
 const { runTransfer }                  = require('./transfer');
 const { showMenu }                     = require('./menu');
 
-// ── Texto de info Flex ────────────────────────────────────────────────────────
-const FLEX_INFO_TEXT =
-  `📌 ¿Te interesa la modalidad Flex?\n` +
-  `Recuerda que:\n\n` +
-  `1️⃣ Todas las actividades deben hacerse de manera individual.\n` +
-  `2️⃣ Necesitas una nota mínima de 12 y estar al día en tus pagos para obtener la certificación.\n` +
-  `3️⃣ No hay costo adicional.\n` +
-  `4️⃣ Debes presentar el avance y entrega final del proyecto en las fechas indicadas por el docente ` +
-  `(Sesión 3 y última sesión).\n\n` +
-  `🙋‍♀️ Para gestionar tu inscripción, llena este formulario:\n` +
-  `👉 https://forms.gle/GuUVsvJwTcdSjaAr5`;
-
 // ── Entrada principal ─────────────────────────────────────────────────────────
 
 async function showAlumnoFlex(phone, session) {
   updateSession(phone, { estado: 'flow_flex_opciones', ultimoTema: 'alumno_flex' });
   tagFlow(phone, ['bot-activo', 'alumno-flex'], 'Alumno Flex');
 
-  await sendText(phone, FLEX_INFO_TEXT);
-  await delay(500);
+  await sendText(
+    phone,
+    `¡Qué bueno que te interese la modalidad Flex! ⚡ Es una excelente opción para manejar tus propios tiempos. ` +
+    `Además, ¡el cambio a esta modalidad no tiene ningún costo adicional! 🥳`
+  );
+
+  await delay(1200);
+
+  await sendText(
+    phone,
+    `Para poder sumarte, solo te pedimos tener en cuenta estos 3 puntos clave:\n\n` +
+    `👤 Todas las actividades y proyectos se realizan de manera individual.\n` +
+    `📅 Debes presentar tus avances puntualmente en la Sesión 3 y en la entrega final.\n` +
+    `🎓 Necesitarás una nota mínima de 12 y estar al día en tus pagos para poder certificarte.`
+  );
+
+  await delay(1200);
+
   await sendButtons(
     phone,
-    `¿Qué deseas hacer ahora?`,
+    `Si todo está claro y quieres empezar, llena tu solicitud de inscripción en este enlace: 👇\n` +
+    `🔗 https://forms.gle/GuUVsvJwTcdSjaAr5\n\n` +
+    `Tómate tu tiempo. Cuando termines, avísame por aquí.`,
     [
-      { id: 'flex_form_lleno', title: '✅ Ya llené el form' },
+      { id: 'flex_form_lleno', title: '✅ Ya me inscribí' },
       { id: 'flex_mas_dudas',  title: '❓ Tengo más dudas' },
       { id: 'menu_principal',  title: '🔙 Menú principal' },
     ]

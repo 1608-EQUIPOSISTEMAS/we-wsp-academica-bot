@@ -2,7 +2,6 @@ const { sendText, sendButtons, sendList, delay } = require('../services/whatsapp
 const { updateSession }                   = require('../services/session');
 const { tagFlow }                         = require('../services/chatwoot');
 const { runTransfer }                     = require('./transfer');
-const { showBotResuelto }                 = require('./resuelto');
 const { getStudentCronograma,
         getProgramModules }               = require('../services/database');
 
@@ -155,7 +154,7 @@ async function handleCronograma(phone, session) {
   await sendList(
     phone,
     'Mis Programas',
-    `📅 Aquí están tus programas *Presenciales y En Vivo* activos.\n_Los cursos Online no aparecen aquí._\nSelecciona uno para ver el acceso a clases:`,
+    `Aquí tienes el detalle de tus programas Presenciales y En Vivo activos. 📅👇\n\n💡 Dato: Si buscas tus cursos Online, recuerda que esos viven directamente en tu Campus Virtual.`,
     'W|E Educación Ejecutiva',
     '📅 Ver mis programas',
     sections
@@ -185,8 +184,7 @@ async function handleCronogramaReply(phone, id, session) {
     updateSession(phone, { ultimoTema: 'cronograma' });
     await sendText(
       phone,
-      `Tienes más programas activos de los que podemos mostrar en esta lista 😊\n` +
-      `Un asesor del equipo académico te enviará el cronograma completo 💙`
+      `¡Veo que tienes un perfil académico súper activo con nosotros! 🌟 Como la lista es muy larga para mostrarla por aquí, voy a pedirle a uno de mis compañeros que te envíe tu cronograma completo en un documento.`
     );
     return runTransfer(phone, { ...session, ultimoTema: 'cronograma' },
       'El alumno tiene más de 9 programas activos y solicitó ver el cronograma completo.'
@@ -230,8 +228,15 @@ async function handleCronogramaReply(phone, id, session) {
 
     await sendText(phone, msg.trim());
     updateSession(phone, { estado: 'resuelto_bot', resuelto_bot_at: Date.now() });
-    await delay(500);
-    await showBotResuelto(phone);
+    await delay(2500);
+    await sendButtons(
+      phone,
+      `Tómate tu tiempo para revisar las fechas y unirte a los grupos. ¿Te ayudo con alguna otra consulta académica?`,
+      [
+        { id: 'bot_resuelto_no', title: '✅ No, eso es todo' },
+        { id: 'volver_menu',     title: '🔙 Volver al menú' },
+      ]
+    );
     return;
   }
 
@@ -258,8 +263,15 @@ async function handleCronogramaReply(phone, id, session) {
 
   await sendText(phone, msg.trim());
   updateSession(phone, { estado: 'resuelto_bot', resuelto_bot_at: Date.now() });
-  await delay(500);
-  await showBotResuelto(phone);
+  await delay(2500);
+  await sendButtons(
+    phone,
+    `Tómate tu tiempo para revisar las fechas y unirte a los grupos. ¿Te ayudo con alguna otra consulta académica?`,
+    [
+      { id: 'bot_resuelto_no', title: '✅ No, eso es todo' },
+      { id: 'volver_menu',     title: '🔙 Volver al menú' },
+    ]
+  );
 }
 
 module.exports = { handleCronograma, handleCronogramaReply };

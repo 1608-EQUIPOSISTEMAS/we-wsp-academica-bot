@@ -441,7 +441,7 @@ async function handleCertReply(phone, buttonId, session) {
     await delay(500);
     await sendButtons(
       phone,
-      `Entendido 😊 ¿Qué necesitas?`,
+      `No te preocupes, vamos a solucionarlo. ¿Qué problema tienes exactamente con tu certificado? 👇`,
       [
         { id: 'cert_no_aparece',  title: '📋 No aparece mi cert' },
         { id: 'cert_correccion',  title: '✏️ Corregir un dato' },
@@ -503,9 +503,10 @@ async function handleCertReply(phone, buttonId, session) {
     }
     await sendText(
       phone,
-      `Entendido 😊 Un asesor del equipo académico revisará los datos de tu certificado y te contactará para coordinar la corrección 💙`
+      `¡Comprendo! 📝 Tomo nota de que hay un error en los datos. Voy a pedirle a un especialista que revise tu expediente para emitir la corrección.`
     );
-    return runTransfer(phone, { ...session, ultimoTema: 'reclamo_certificado' });
+    await runTransfer(phone, { ...session, ultimoTema: 'reclamo_certificado' });
+    return;
   }
 
   // ── Nuevo handler: selección dentro de cert_avanzado_* ───────────────────
@@ -528,9 +529,10 @@ async function handleCertReply(phone, buttonId, session) {
 
     await sendText(
       phone,
-      `Entendido 😊 Un asesor del equipo académico revisará el estado de tu certificado y se comunicará contigo a la brevedad 💙`
+      `¡Comprendo! 🔎 Voy a reportar que tu documento no aparece para que lo generemos cuanto antes.`
     );
-    return runTransfer(phone, { ...session, ultimoTema: 'certificacion_avanzada' });
+    await runTransfer(phone, { ...session, ultimoTema: 'certificacion_avanzada' });
+    return;
   }
 
   // ── Paso 6: Certificado de Odoo seleccionado → descargar y enviar PDF ───
@@ -562,10 +564,10 @@ async function handleCertReply(phone, buttonId, session) {
           `🎓 ¡Aquí tienes tu certificado! Felicitaciones por completar tu programa 🎉`
         );
         updateSession(phone, { estado: 'flow_cert_post_envio', resuelto_bot_at: Date.now() });
-        await delay(500);
+        await delay(2500);
         await sendButtons(
           phone,
-          `¿Hay algo más en lo que pueda ayudarte? 😊`,
+          `¡Aquí lo tienes! 🎓 Tómate un momento para revisarlo. ¿Te puedo ayudar con algo más?`,
           [
             { id: 'cert_ver_mas',      title: '🎓 Otro certificado' },
             { id: 'bot_resuelto_menu', title: '📋 Ver menú' },

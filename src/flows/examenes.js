@@ -10,20 +10,26 @@ async function showExamenes(phone) {
 
   await sendText(
     phone,
-    `Para iniciar el proceso de tu Examen *internacional* es importante lo siguiente:\n\n` +
-    `1️⃣ Llena el siguiente formulario: 🙋🏻‍♀️\n` +
-    `👉 https://forms.gle/GuUVsvJwTcdSjaAr5\n\n` +
-    `2️⃣ Adjunta la captura de pantalla de esta conversación para validar tu inscripción 🤝🏻\n\n` +
-    `🚨 *Este proceso tiene una duración de entre 10 a 15 días hábiles.* ✨`
+    `¡Excelente! 🌟 Rendir tu examen internacional es un gran paso. Para gestionar tu inscripción, sigue estos dos sencillos pasos:`
   );
 
-  await delay(500);
+  await delay(1200);
+
+  await sendText(
+    phone,
+    `1️⃣ Completa tus datos en este formulario: https://forms.gle/GuUVsvJwTcdSjaAr5\n` +
+    `2️⃣ Sube una captura de pantalla de *esta conversación* dentro de ese mismo formulario para validar tu solicitud. 📸\n\n` +
+    `⏳ *Nota: Este trámite de validación toma entre 10 y 15 días hábiles.*`
+  );
+
+  await delay(1200);
+
   await sendButtons(
     phone,
-    `¿Qué deseas hacer?`,
+    `Tómate tu tiempo para llenarlo con calma. Cuando termines, avísame por aquí, o dime si tienes alguna duda con el proceso. 👇`,
     [
-      { id: 'exam_formulario_ok', title: '✅ Llené el form' },
-      { id: 'form_problemas',     title: '⚠️ Tengo problemas' },
+      { id: 'exam_formulario_ok', title: '✅ Ya lo completé' },
+      { id: 'form_problemas',     title: '🆘 Necesito ayuda' },
       { id: 'menu_principal',     title: '🔙 Menú principal' },
     ]
   );

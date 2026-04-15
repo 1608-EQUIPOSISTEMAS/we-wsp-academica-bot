@@ -4,7 +4,6 @@ const { findAlumnoByEmail,
 const { syncStudentFromOdoo }                 = require('../services/odoo');
 const { updateSession }                       = require('../services/session');
 const { tagFlow, tagAlumno }                  = require('../services/chatwoot');
-const { showMenu }                            = require('./menu');
 const { runTransfer }                         = require('./transfer');
 const { isWithinBusinessHours, getScheduleText } = require('../services/schedule');
 
@@ -13,23 +12,47 @@ function normalizePhone(p) {
   return String(p || '').replace(/\D/g, '');
 }
 
+/**
+ * Extrae el primer nombre de un full_name en MAYÚSCULAS y lo convierte a Title Case.
+ * "ELIUTH DAVID SEGUIL MACHCO" → "Eliuth"
+ */
+function _toFirstName(fullName) {
+  if (!fullName) return '';
+  const first = String(fullName).trim().split(/\s+/)[0];
+  return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
+}
+
 async function startIdentificacion(phone) {
   const dentroHorario = isWithinBusinessHours();
 
   await sendText(
     phone,
-    `👋 ¡Hola! Bienvenido/a a *W|E Educación Ejecutiva*\nSoy **Eva**, tu asistente W|E 😊\nEstoy aquí para ayudarte`
+    `¡Hola! 👋 Soy *Eva*, tu asistente virtual en _W|E Educación Ejecutiva_. ¡Qué gusto saludarte!`
   );
 
-  await new Promise(resolve => setTimeout(resolve, 1000));
+  await delay(1200);
 
-  const segundoMensaje = dentroHorario
-    ? `Por favor, indícame el correo electrónico con el que realizaste tu inscripción para poder brindarte una mejor atención`
-    : `En este momento nuestros asesores no están disponibles, pero puedo ayudarte con consultas automáticas 🤖\n\n` +
-      `⏰ *Horario de atención:*\n${getScheduleText()}\n\n` +
-      `Por favor, indícame el correo electrónico con el que realizaste tu inscripción`;
+  if (dentroHorario) {
+    await sendText(
+      phone,
+      `Estoy aquí para ayudarte a resolver tus consultas académicas al instante ⚡`
+    );
+  } else {
+    await sendText(
+      phone,
+      `En este momento nuestro equipo humano está descansando 🌙 _(están disponibles ${getScheduleText()})_, ` +
+      `¡pero no te preocupes! Yo estoy aquí 24/7 para ayudarte a resolver tus consultas académicas al instante ⚡`
+    );
+  }
 
-  await sendText(phone, segundoMensaje);
+  await delay(1200);
+
+  await sendText(
+    phone,
+    `Para poder buscar tu expediente en nuestro sistema y darte información exacta, ` +
+    `¿podrías escribirme el correo electrónico con el que realizaste tu inscripción? 📧`
+  );
+
   updateSession(phone, { estado: 'esperando_correo' });
   tagFlow(phone, ['bot-activo']);
 }
@@ -82,13 +105,13 @@ async function handleCorreo(phone, email, session) {
     const transferido = await _registrarFalloCorreo(phone, session);
     if (transferido) return;
 
-    const intentos  = session.correo_intentos || 0; // ya actualizado por _registrarFalloCorreo
+    const intentos  = session.correo_intentos || 0;
     const restantes = MAX_INTENTOS_CORREO - intentos;
     await sendText(
       phone,
-      `⚠️ Eso no parece un correo electrónico válido.\n` +
-      `Por favor escribe tu correo de inscripción (ej: *nombre@gmail.com*) 📧` +
-      (restantes === 1 ? `\n\n_Último intento disponible._` : '')
+      `Hmm, eso no parece un correo electrónico válido 🤔\n` +
+      `Recuerda que suele tener el formato *nombre@ejemplo.com*. ¿Podrías escribirlo de nuevo?` +
+      (restantes === 1 ? `\n\n_Este es tu último intento disponible._` : '')
     );
     return;
   }
@@ -128,16 +151,12 @@ async function handleCorreo(phone, email, session) {
   }
 
   if (alumno) {
-    if (needsSync) {
-      await sendText(phone, `✅ Listo, validación completada`);
-    }
     // ── Verificación de número (transparente — sin mensaje al alumno) ────────
     const sessionPhone  = normalizePhone(phone);
     const dbPhone       = normalizePhone(alumno.phone);
     const devBypass     = process.env.DEV_BYPASS_PHONE
       ? sessionPhone.endsWith(normalizePhone(process.env.DEV_BYPASS_PHONE))
       : false;
-    // Aceptar si uno es sufijo del otro (maneja diferencias de código de país)
     const verified = devBypass || (
       sessionPhone.length > 0 && dbPhone.length > 0 &&
       (sessionPhone === dbPhone ||
@@ -148,35 +167,45 @@ async function handleCorreo(phone, email, session) {
     if (devBypass) console.log(`[identificacion] DEV_BYPASS_PHONE activo — verified forzado (sesión=${sessionPhone})`);
     else           console.log(`[identificacion] phone verificado: ${verified} (sesión=${sessionPhone}, db=${dbPhone})`);
 
-    // ── Verificar membresía VIP (actualiza ods_student_bot y retorna estado) ──
-    let isMember    = false;
+    // ── Verificar membresía VIP ───────────────────────────────────────────────
+    let isMember       = false;
     let membershipTier = null;
     try {
-      const mem   = await checkAndUpdateMembership(emailClean);
-      isMember    = mem.isMember;
+      const mem  = await checkAndUpdateMembership(emailClean);
+      isMember   = mem.isMember;
       membershipTier = mem.tier;
     } catch (err) {
       console.error('[identificacion] Error verificando membresía:', err.message);
-      // No bloquear el flujo si la consulta de membresía falla
     }
 
+    const primerNombre = _toFirstName(alumno.full_name);
+
     updateSession(phone, {
-      nombre:          alumno.full_name,
-      correo:          alumno.email,
-      studentId:       alumno.id,
-      odooPartnerId:   alumno.odoo_partner_id || null,
+      nombre:        alumno.full_name,
+      correo:        alumno.email,
+      studentId:     alumno.id,
+      odooPartnerId: alumno.odoo_partner_id || null,
       verified,
       isMember,
       membershipTier,
-      estado:          'menu',
+      estado:        'menu',
     });
     tagAlumno(phone, alumno.full_name, alumno.email);
-    const saludoInicial = (verified && isMember)
-      ? `¡Hola ${alumno.full_name}! Qué gusto saludar a un miembro ${membershipTier} 🖤`
-      : `✅ ¡Hola, ${alumno.full_name}! Te encontramos en el sistema 😊`;
-    await sendText(phone, saludoInicial);
+
+    const saludoTexto = (verified && isMember)
+      ? `¡Hola ${primerNombre}! Qué gusto saludar a un miembro ${membershipTier} 🖤 ¿En qué puedo ayudarte hoy?`
+      : `¡Hola ${primerNombre}! 👋 Te encontré en el sistema. ¿En qué te puedo ayudar hoy?`;
+
     await delay(500);
-    await showMenu(phone, alumno.full_name);
+    await sendButtons(
+      phone,
+      saludoTexto,
+      [
+        { id: 'menu_academico', title: '📚 Académico' },
+        { id: 'menu_pagos',     title: '💳 Pagos' },
+        { id: 'hablar_asesor',  title: '💬 Con un asesor' },
+      ]
+    );
   } else {
     const transferido = await _registrarFalloCorreo(phone, session);
     if (transferido) return;
@@ -184,10 +213,10 @@ async function handleCorreo(phone, email, session) {
     updateSession(phone, { estado: 'correo_no_encontrado' });
     await sendButtons(
       phone,
-      `🔍 No encontramos ese correo en nuestro sistema.\n¿Qué deseas hacer?`,
+      `Uy, busqué por todas partes pero no logré encontrar ese correo en nuestros registros 🕵️‍♀️\n¿Es posible que te hayas inscrito con otro?`,
       [
         { id: 'reintentar_correo', title: 'Intentar otro correo' },
-        { id: 'hablar_asesor',    title: 'Hablar con un asesor' },
+        { id: 'hablar_asesor',     title: 'Hablar con un asesor' },
       ]
     );
   }

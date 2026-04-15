@@ -21,22 +21,22 @@ async function showMenuAcademico(phone) {
   updateSession(phone, { estado: 'menu' });
   await sendList(
     phone,
-    'Académico y Gestión',
-    '¿Qué necesitas?',
-    'Selecciona una opción',
-    '📋 Ver opciones',
+    '📚 Área Académica',
+    '¡Perfecto! Aquí tienes las opciones para gestionar tu cursada. Selecciona la que mejor describa tu consulta. 👇',
+    'Siempre puedes elegir \'Menú principal\' para volver atrás.',
+    'Ver opciones',
     [{
       title: 'Académico y Gestión',
       rows: [
-        { id: 'materiales',      title: '🖥️ Campus y Materiales', description: 'Acceso al campus virtual' },
-        { id: 'cronograma',      title: '📅 Cronograma',           description: 'Fechas de tu programa' },
-        { id: 'examenes_int',    title: '📝 Exámenes Int.',        description: 'Certificaciones internacionales' },
-        { id: 'certificacion',   title: '🏅 Certificación',        description: 'Estado y tiempos' },
-        { id: 'justificaciones', title: '📄 Justificaciones',      description: 'Gestiona tu inasistencia' },
-        { id: 'alumno_flex',     title: '⚡ Alumno Flex',          description: 'Modalidad flexible' },
-        { id: 'inscripcion',     title: '📝 Inscribirme',          description: 'Inscripción a programas' },
-        { id: 'instaladores',    title: '💻 Instaladores',         description: 'SAP, Office y más' },
-        { id: 'menu_principal',  title: '🔙 Menú principal',       description: 'Volver al inicio' },
+        { id: 'campus_materiales', title: '💻 Campus y Materiales', description: 'Acceso a clases grabadas, aula virtual y material de estudio.' },
+        { id: 'cronograma',        title: '📅 Cronograma',           description: 'Consulta las fechas de inicio, feriados y calendario de tu programa.' },
+        { id: 'examenes_int',      title: '📝 Exámenes Internac.',   description: 'Información sobre simulacros y rendición de certificaciones globales.' },
+        { id: 'certificacion',     title: '🎓 Certificación',        description: 'Revisa el estado de tu trámite, tiempos de entrega y requisitos.' },
+        { id: 'justificaciones',   title: '⚠️ Justificaciones',      description: 'Reporta inasistencias o solicita prórrogas por motivos de fuerza mayor.' },
+        { id: 'alumno_flex',       title: '⚡ Alumno Flex',          description: 'Consulta las condiciones y beneficios de la modalidad de estudio flexible.' },
+        { id: 'inscribirme',       title: '➕ Inscribirme',          description: 'Conoce nuestra oferta académica y anótate a un nuevo programa.' },
+        { id: 'instaladores',      title: '⚙️ Instaladores',         description: 'Links y guías paso a paso para instalar SAP, Office u otro software.' },
+        { id: 'menu_principal',    title: '🔙 Menú principal',       description: 'Vuelve al inicio para consultas de Pagos o hablar con un asesor.' },
       ],
     }]
   );

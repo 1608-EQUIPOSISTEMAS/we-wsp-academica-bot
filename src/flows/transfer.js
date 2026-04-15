@@ -7,7 +7,6 @@ const log                                                                   = re
 
 // ── Mapeo tema → equipo ───────────────────────────────────────────────────────
 const TEAM_ACADEMICO = process.env.CHATWOOT_TEAM_ACADEMICO;
-const TEAM_SOPORTE   = process.env.CHATWOOT_TEAM_SOPORTE;
 const TEAM_FINANZAS  = process.env.CHATWOOT_TEAM_FINANZAS;
 const TEAM_GENERAL   = process.env.CHATWOOT_TEAM_GENERAL;
 
@@ -23,10 +22,10 @@ const TOPIC_TEAM = {
   reclamo_activacion:        TEAM_ACADEMICO,
   reclamo_materiales:        TEAM_ACADEMICO,
   certificacion_avanzada:    TEAM_ACADEMICO,
-  instaladores:         TEAM_SOPORTE,
-  soporte_sap:          TEAM_SOPORTE,
-  soporte_office:       TEAM_SOPORTE,
-  soporte_instaladores: TEAM_SOPORTE,
+  instaladores:         TEAM_ACADEMICO,
+  soporte_sap:          TEAM_ACADEMICO,
+  soporte_office:       TEAM_ACADEMICO,
+  soporte_instaladores: TEAM_ACADEMICO,
   pagos:                TEAM_FINANZAS,
 };
 
@@ -147,17 +146,17 @@ async function _transferDentroHorario(phone, session, extraNote, solicitud) {
   if (solicitud && tipo !== 'CONSULTA_GENERAL') {
     await sendTextDirect(
       phone,
-      `🎫 *Tu número de ticket: ${solicitud.ticket_number}*\n` +
-      `Un asesor te atenderá en breve 💙\n\n` +
-      `⏱️ Tiempo de espera estimado: *15 minutos*\n` +
-      `Por favor, mantente atento a este chat.`
+      `¡Entendido! Voy a transferirte con un humano de nuestro equipo para que te ayude mejor con esto. 🧑‍💻\n\n` +
+      `💡 *Dato:* Ya le compartí nuestro historial de chat para que tenga todo el contexto y no tengas que repetir nada. ` +
+      `Tu número de seguimiento es el *#${solicitud.ticket_number}*.\n\n` +
+      `⏱️ El tiempo estimado de respuesta es de unos *15 minutos*. Te escribiremos por aquí mismo, ¡así que no te vayas lejos!`
     );
   } else {
     await sendTextDirect(
       phone,
-      `Entendido 💙 En breve un asesor del equipo académico te atenderá.\n\n` +
-      `⏱️ Tiempo de espera estimado: *15 minutos*\n` +
-      `Por favor, mantente atento a este chat.`
+      `¡Entendido! Voy a conectarte con uno de nuestros asesores para que te ayude con tu consulta. 🧑‍💻\n\n` +
+      `💡 *Dato:* Ya le compartí nuestra conversación para que tenga todo el contexto.\n\n` +
+      `⏱️ El tiempo estimado de respuesta es de unos *15 minutos*. Te escribiremos por aquí mismo. ☕`
     );
   }
 
@@ -192,17 +191,18 @@ async function _transferFueraDeHorario(phone, session, extraNote, solicitud) {
   if (solicitud && tipo !== 'CONSULTA_GENERAL') {
     await sendTextDirect(
       phone,
-      `🎫 *Tu número de ticket: ${solicitud.ticket_number}*\n` +
-      `Tu consulta ha quedado registrada 😊\n\n` +
-      `⏰ Nuestro equipo atiende:\n${getScheduleText()}\n\n` +
-      `Un asesor te contactará al inicio del siguiente horario de atención.`
+      `¡Entendido! He dejado tu caso registrado con el número *#${solicitud.ticket_number}*. 📝\n\n` +
+      `Como ahora mismo nuestro equipo humano está descansando 🌙, te responderemos apenas volvamos a conectarnos.\n\n` +
+      `⏰ *Nuestro horario:*\n${getScheduleText()}\n\n` +
+      `¡Hablamos pronto!`
     );
   } else {
     await sendTextDirect(
       phone,
-      `Hola ${nombre} 💙 Nuestro equipo académico atiende en el siguiente horario:\n\n` +
-      `${getScheduleText()}\n\n` +
-      `Tu consulta ha quedado registrada y un asesor te contactará al inicio del siguiente horario de atención 😊` 
+      `¡Entendido! He dejado una nota a nuestro equipo para que revisen tu caso apenas se conecten. 📝\n\n` +
+      `Como ahora mismo están descansando 🌙, te responderemos al inicio de nuestro turno.\n\n` +
+      `⏰ *Nuestro horario:*\n${getScheduleText()}\n\n` +
+      `¡Hablamos pronto!`
     );
   }
 

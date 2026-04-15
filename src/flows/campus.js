@@ -13,19 +13,19 @@ async function showCampus(phone, session) {
 
   await sendText(
     phone,
-    `Para ingresar a tu campus, ingresa mediante este link:\n` +
-    `👉 https://we-educacion.com/web/login\n\n` +
+    `¡Claro que sí! Todo tu material de estudio y las clases grabadas te esperan en el Campus Virtual 📚\n\n` +
+    `🔗 Puedes ingresar desde aquí: https://we-educacion.com/web/login\n\n` +
     `• Usuario: *${usuario}*\n` +
     `• Contraseña: *1234567*`
   );
 
-  await delay(500);
+  await delay(1500);
   await sendButtons(
     phone,
-    `¿Pudiste ingresar sin problema?`,
+    `Tómate tu tiempo para intentar ingresar. Si no recuerdas tu contraseña o tienes algún inconveniente, avísame y lo resolvemos. 👇`,
     [
-      { id: 'mat_ok',         title: '✅ Ya tengo acceso' },
-      { id: 'form_problemas', title: '⚠️ Tengo problemas' },
+      { id: 'mat_ok',         title: '✅ Pude ingresar bien' },
+      { id: 'form_problemas', title: '🆘 Tengo problemas' },
       { id: 'menu_principal', title: '🔙 Menú principal' },
     ]
   );

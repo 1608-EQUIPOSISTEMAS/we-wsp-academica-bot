@@ -24,7 +24,7 @@ async function handleBotResuelto(phone, buttonId, session) {
     await delay(500);
     await sendButtons(
       phone,
-      `¡Genial! Para seguir mejorando, ¿qué tal te pareció mi atención automática hoy? 🤖`,
+      `¡Perfecto! Ha sido un gusto ayudarte hoy. ✨\n\nPara seguir mejorando, ¿cómo calificarías mi ayuda como asistente virtual? 🤖`,
       [
         { id: 'bot_csat_good', title: '🟢 Excelente' },
         { id: 'bot_csat_ok',   title: '🟡 Regular' },

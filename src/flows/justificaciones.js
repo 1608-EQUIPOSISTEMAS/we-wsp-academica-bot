@@ -9,23 +9,28 @@ async function showJustificaciones(phone, session) {
   updateSession(phone, { estado: 'flow_justificacion_info', ultimoTema: 'justificaciones' });
   tagFlow(phone, ['bot-activo', 'justificaciones'], 'Justificaciones');
 
-  const nombre = session?.nombre || 'Alumno';
+  await sendText(
+    phone,
+    `Entiendo. Si tuviste algún inconveniente y necesitas justificar una inasistencia o tardanza, ` +
+    `puedes registrarlo rápidamente en este enlace: 👇\n` +
+    `🔗 https://bit.ly/JTF-04`
+  );
+
+  await delay(1200);
 
   await sendText(
     phone,
-    `¡Hola ${nombre}! ☀️\n` +
-    `Para que puedas justificar tu inasistencia o tardanza, te envío el link aquí 👇🏼\n\n` +
-    `📌 https://bit.ly/JTF-04\n\n` +
-    `🚨 *Recuerda:* Solo puedes justificar hasta 2 inasistencias o tardanzas por curso.`
+    `ℹ️ *Dato importante:* Ten en cuenta que el límite permitido es de hasta 2 justificaciones por curso.`
   );
 
-  await delay(500);
+  await delay(1200);
+
   await sendButtons(
     phone,
-    `¿Pudiste completarlo?`,
+    `Completa el formulario con calma. Cuando termines, confírmame por aquí para saber que todo salió bien. 😊`,
     [
-      { id: 'just_listo',     title: '✅ Listo, ya llené' },
-      { id: 'form_problemas', title: '⚠️ Tengo problemas' },
+      { id: 'just_listo',     title: '✅ Ya lo completé' },
+      { id: 'form_problemas', title: '🆘 Necesito ayuda' },
       { id: 'menu_principal', title: '🔙 Menú principal' },
     ]
   );
