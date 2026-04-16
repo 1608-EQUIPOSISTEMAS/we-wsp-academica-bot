@@ -558,16 +558,14 @@ app.get('/webhook/meta', (req, res) => {
 });
 
 app.post('/webhook/meta', webhookLimiter, async (req, res) => {
+  console.log('🔴🔴🔴 INTERCEPCIÓN EN /webhook/meta 🔴🔴🔴');
+  console.log(JSON.stringify(req.body, null, 2));
+  console.log('🔴🔴🔴 FIN INTERCEPCIÓN 🔴🔴🔴');
+
   // 1. Respuesta inmediata a Meta (requerido en < 20s)
   res.sendStatus(200);
 
   const body = req.body;
-
-  // ── [DEBUG TEMPORAL] Dump completo del payload de Meta ────────────────────
-  console.log('=============================================');
-  console.log('[META DIRECTO] Recibido POST en /webhook/meta');
-  console.log(JSON.stringify(body, null, 2));
-  console.log('=============================================');
 
   // 2. Proxy transparente → reenviar a Chatwoot sin bloquear
   const chatwootWebhookUrl = process.env.CHATWOOT_META_WEBHOOK_URL;
