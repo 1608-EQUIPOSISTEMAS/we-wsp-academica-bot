@@ -9,12 +9,18 @@ async function showInscripcion(phone, session) {
   tagFlow(phone, ['bot-activo', 'inscripcion'], 'Inscripción');
 
   if (session.verified === true && session.isMember === true) {
-    const esBlack = session.membershipTier === 'WE BLACK';
+    const tier = session.membershipTier;
+    const tierBeneficio = tier === 'WE BLACK'
+      ? `✨ Como miembro *${tier}*, puedes inscribirte en programas de forma *ilimitada* — ¡es uno de tus grandes beneficios!`
+      : tier === 'WE PLAT'
+      ? `🥈 Como miembro *${tier}*, puedes inscribirte en hasta *5 programas* como parte de tu membresía.`
+      : `✨ Como miembro *${tier}*, puedes inscribirte en hasta *2 programas* como parte de tu membresía.`;
+
     await sendText(
       phone,
-      `📩 Te comparto el link de inscripción para que puedas registrarte en el curso o programa de tu interés:\n` +
+      `${tierBeneficio}\n\n` +
+      `📩 Aquí tienes el link de inscripción:\n` +
       `🔗 https://forms.gle/4dMmBtTuHaz1fYdb6\n\n` +
-      (esBlack ? `✨ Recuerda que con tu membresía activa tienes acceso ilimitado a todos los programas.\n` : '') +
       `✅ No olvides revisar los horarios disponibles y elegir el que mejor se adapte a ti.\n\n` +
       `Si tienes dudas o necesitas ayuda con el registro, ¡estoy para ayudarte! 💬😊`
     );

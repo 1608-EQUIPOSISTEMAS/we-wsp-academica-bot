@@ -193,9 +193,10 @@ async function handleCorreo(phone, email, session) {
     });
     tagAlumno(phone, alumno.full_name, alumno.email);
 
+    const tierEmoji = { 'WE BLACK': '🖤', 'WE GOLD': '✨', 'WE PLAT': '🥈' };
     const saludoTexto = (verified && isMember)
-      ? `¡Hola ${primerNombre}! Qué gusto saludar a un miembro ${membershipTier} 🖤 ¿En qué puedo ayudarte hoy?`
-      : `¡Hola ${primerNombre}! 👋 Te encontré en el sistema. ¿En qué te puedo ayudar hoy?`;
+      ? `¡${primerNombre}! Qué gusto saludar a un miembro ${membershipTier} ${tierEmoji[membershipTier] ?? '⭐'} ¿En qué puedo ayudarte hoy?`
+      : `¡${primerNombre}! 👋 Te encontré en el sistema. ¿En qué te puedo ayudar hoy?`;
 
     await sendText(phone, saludoTexto);
     await delay(800);
