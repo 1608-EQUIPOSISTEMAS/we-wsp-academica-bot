@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express   = require('express');
 const rateLimit = require('express-rate-limit');
+const axios     = require('axios');
 
 const { handleIncoming }                                         = require('./bot');
 const { postMessage, updateLabels }                              = require('./services/chatwoot');
@@ -8,6 +9,7 @@ const { getSession, deleteSession, updateSession,
         updateSessionByConvId, getAllSessions }                  = require('./services/session');
 const { sendText, sendList }                                     = require('./services/whatsapp');
 const { startInactivityWatcher }                                 = require('./services/inactivity');
+const { handleMetaFlowResponse }                                 = require('./services/metaWebhook');
 const log                                                        = require('./utils/logger');
 
 const app  = express();
@@ -534,6 +536,94 @@ app.post('/webhook/chatwoot', webhookLimiter, (req, res) => {
   }
 });
 
+// ── Middleware Transparente de Meta ───────────────────────────────────────────
+// El bot es el webhook primario ante Meta. Cada payload recibido se reenvía
+// a Chatwoot (proxy) y, si contiene un nfm_reply, se intercepta para procesar
+// la respuesta del Flow antes de que Chatwoot pueda descartarla.
+
+app.get('/webhook/meta', (req, res) => {
+  const mode      = req.query['hub.mode'];
+  const token     = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+
+  if (mode === 'subscribe' && token === process.env.META_VERIFY_TOKEN) {
+    log.info('meta-webhook', 'Verificación de Meta exitosa');
+    return res.status(200).send(challenge);
+  }
+
+  log.warn('meta-webhook', 'Verificación de Meta fallida', {
+    mode, tokenMatch: token === process.env.META_VERIFY_TOKEN,
+  });
+  return res.sendStatus(403);
+});
+
+app.post('/webhook/meta', webhookLimiter, async (req, res) => {
+  // 1. Respuesta inmediata a Meta (requerido en < 20s)
+  res.sendStatus(200);
+
+  const body = req.body;
+
+  // 2. Proxy transparente → reenviar a Chatwoot sin bloquear
+  const chatwootWebhookUrl = process.env.CHATWOOT_META_WEBHOOK_URL;
+  if (chatwootWebhookUrl) {
+    axios.post(chatwootWebhookUrl, body, {
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 8000,
+    }).catch(err => {
+      log.error('meta-webhook', 'Error reenviando payload a Chatwoot', {
+        url:   chatwootWebhookUrl,
+        error: err.message,
+      });
+    });
+  } else {
+    log.warn('meta-webhook', 'CHATWOOT_META_WEBHOOK_URL no definida — proxy desactivado');
+  }
+
+  // 3. Interceptar nfm_reply para procesar respuestas de Meta Flow
+  try {
+    const entries = body?.entry || [];
+    for (const entry of entries) {
+      for (const change of (entry.changes || [])) {
+        const messages = change.value?.messages || [];
+        for (const message of messages) {
+
+          if (message.type !== 'interactive') continue;
+          if (message.interactive?.type !== 'nfm_reply') continue;
+
+          const nfmReply = message.interactive.nfm_reply;
+          const rawPhone = message.from;
+          if (!rawPhone || !nfmReply) continue;
+
+          const phone = rawPhone.replace(/^\+/, '');
+
+          let flowData;
+          try {
+            flowData = JSON.parse(nfmReply.response_json || '{}');
+          } catch (parseErr) {
+            log.error('meta-webhook', 'Error parseando response_json', {
+              phone, error: parseErr.message,
+            });
+            continue;
+          }
+
+          log.info('meta-webhook', 'nfm_reply interceptado', {
+            phone,
+            flowName: nfmReply.name || 'unknown',
+            fields:   Object.keys(flowData),
+          });
+
+          await handleMetaFlowResponse(phone, flowData);
+        }
+      }
+    }
+  } catch (err) {
+    log.error('meta-webhook', 'Error procesando nfm_reply', {
+      error: err.message,
+      stack: err.stack?.split('\n').slice(0, 4).join(' | '),
+    });
+  }
+});
+
 // ── Health check HTTP ─────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => {
   const sessions = getAllSessions();
@@ -547,10 +637,11 @@ app.get('/health', (_req, res) => {
 // ── Arranque ──────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   log.info('server', 'W|E Bot arrancado', {
-    port:     PORT,
-    env:      process.env.NODE_ENV || 'development',
-    webhook:  'POST /webhook/chatwoot',
-    health:   'GET /health',
+    port:          PORT,
+    env:           process.env.NODE_ENV || 'development',
+    webhookCw:     'POST /webhook/chatwoot',
+    webhookMeta:   'POST /webhook/meta',
+    health:        'GET /health',
   });
   startInactivityWatcher();
 });
