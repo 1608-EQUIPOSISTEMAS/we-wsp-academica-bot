@@ -146,7 +146,7 @@ async function _transferDentroHorario(phone, session, extraNote, solicitud) {
   if (solicitud && tipo !== 'CONSULTA_GENERAL') {
     await sendTextDirect(
       phone,
-      `¡Entendido! Voy a transferirte con un humano de nuestro equipo para que te ayude mejor con esto. 🧑‍💻\n\n` +
+      `¡Entendido! Voy a transferirte con un especialista de nuestro equipo para que te ayude mejor con esto. 🧑‍💻\n\n` +
       `💡 *Dato:* Ya le compartí nuestro historial de chat para que tenga todo el contexto y no tengas que repetir nada. ` +
       `Tu número de seguimiento es el *#${solicitud.ticket_number}*.\n\n` +
       `⏱️ El tiempo estimado de respuesta es de unos *15 minutos*. Te escribiremos por aquí mismo, ¡así que no te vayas lejos!`
@@ -154,7 +154,7 @@ async function _transferDentroHorario(phone, session, extraNote, solicitud) {
   } else {
     await sendTextDirect(
       phone,
-      `¡Entendido! Voy a conectarte con uno de nuestros asesores para que te ayude con tu consulta. 🧑‍💻\n\n` +
+      `¡Entendido! Voy a conectarte con uno de nuestros especialistas para que te ayude con tu consulta. 🧑‍💻\n\n` +
       `💡 *Dato:* Ya le compartí nuestra conversación para que tenga todo el contexto.\n\n` +
       `⏱️ El tiempo estimado de respuesta es de unos *15 minutos*. Te escribiremos por aquí mismo. ☕`
     );
@@ -192,7 +192,7 @@ async function _transferFueraDeHorario(phone, session, extraNote, solicitud) {
     await sendTextDirect(
       phone,
       `¡Entendido! He dejado tu caso registrado con el número *#${solicitud.ticket_number}*. 📝\n\n` +
-      `Como ahora mismo nuestro equipo humano está descansando 🌙, te responderemos apenas volvamos a conectarnos.\n\n` +
+      `Como ahora mismo nuestros especialistas están descansando 🌙, te responderemos apenas volvamos a conectarnos.\n\n` +
       `⏰ *Nuestro horario:*\n${getScheduleText()}\n\n` +
       `¡Hablamos pronto!`
     );

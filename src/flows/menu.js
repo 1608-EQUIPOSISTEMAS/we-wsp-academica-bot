@@ -16,11 +16,12 @@ async function showMenu(phone, nombre) {
         title: '📚 Académico',
         rows: [
           { id: 'campus_materiales',  title: '💻 Campus y Materiales', description: 'Encuentra el enlace directo para acceder a tus clases y recursos.' },
-          { id: 'cronograma',         title: '📅 Cronograma de clases', description: 'Revisa los módulos activos y las fechas de inicio de tus programas.' },
           { id: 'certificacion',      title: '🎓 Certificación',        description: 'Descarga tus diplomas emitidos o reporta inconvenientes con tus documentos.' },
+          { id: 'cronograma',         title: '📅 Cronograma de clases', description: 'Revisa los módulos activos y las fechas de inicio de tus programas.' },
           { id: 'justificaciones',    title: '⚠️ Justificaciones',      description: 'Reporta inasistencias o solicita prórrogas por motivos de fuerza mayor.' },
           { id: 'inscribirme',        title: '➕ Inscribirme',          description: 'Conoce nuestra oferta académica y anótate a un nuevo programa.' },
           { id: 'examenes_int',       title: '📝 Exámenes Internac.',   description: 'Inicia el trámite para rendir tu examen de certificación global.' },
+          { id: 'hablar_asesor',      title: '💬 Contacto asesor',      description: 'Atención personalizada con uno de nuestros especialistas.' },
         ],
       },
       {
@@ -31,10 +32,9 @@ async function showMenu(phone, nombre) {
         ],
       },
       {
-        title: '🛠️ Soporte',
+        title: '🛠️ Soporte Técnico',
         rows: [
-          { id: 'instaladores',  title: '⚙️ Instaladores',  description: 'Links y guías para instalar SAP, Office u otro software.' },
-          { id: 'hablar_asesor', title: '💬 Con un asesor', description: 'Atención personalizada con uno de nuestros asesores.' },
+          { id: 'instaladores',  title: '⚙️ Instaladores',  description: 'Descarga instaladores y guías: SAP HANA, SAP R/3, Office 365.' },
         ],
       },
     ]

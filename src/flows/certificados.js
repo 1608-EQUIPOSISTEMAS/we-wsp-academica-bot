@@ -220,7 +220,7 @@ async function _sendCertOdooList(phone, certs) {
   await sendList(
     phone,
     'Mis Certificados',
-    `🎓 Aquí están tus certificados disponibles.\nSelecciona uno para descargarlo:`,
+    `🎓 Aquí están tus últimos 9 certificados emitidos (en vivo y online).\nSelecciona uno para descargarlo:`,
     'W|E Educación Ejecutiva',
     '🎓 Ver certificados',
     [{ title: 'Certificados emitidos', rows }]
@@ -310,7 +310,7 @@ async function _handleCertProgramSelected(phone, index, session) {
     );
   } catch (err) {
     console.error('[certificados] Error creando solicitud:', err.message);
-    await sendText(phone, '⚠️ No pudimos registrar tu caso en este momento. Uno de mis compañeros del equipo humano te escribirá por aquí.');
+    await sendText(phone, '⚠️ No pudimos registrar tu caso en este momento. Un especialista de nuestro equipo te escribirá por aquí.');
     await runTransfer(phone, { ...session, ultimoTema: 'certificacion' });
     return;
   }
@@ -323,7 +323,7 @@ async function _handleCertProgramSelected(phone, index, session) {
       `Aún no has generado tu certificado para este programa o está en proceso 📋\n\n` +
       `🎫 *Número de ticket: ${solicitud.ticket_number}*\n` +
       `📄 Programa: *${program.program_name}*\n\n` +
-      `Uno de mis compañeros del equipo humano te escribirá por aquí a la brevedad 💙\n` +
+      `Un especialista de nuestro equipo te escribirá por aquí a la brevedad 💙\n` +
       `⏱️ Tiempo estimado: 15 minutos`
     );
     await runTransfer(
@@ -463,7 +463,7 @@ async function handleCertReply(phone, buttonId, session) {
       await sendText(
         phone,
         `No encontramos programas registrados en tu cuenta 😔\n\n` +
-        `Uno de mis compañeros del equipo humano te escribirá por aquí para ayudarte 💙`
+        `Un especialista de nuestro equipo te escribirá por aquí para ayudarte 💙`
       );
       return runTransfer(phone, { ...session, ultimoTema: 'certificacion_avanzada' });
     }
@@ -686,7 +686,7 @@ async function handleCertReply(phone, buttonId, session) {
     await askReclamoDatos(
       phone,
       'reclamo_certificado',
-      `Lamentamos el inconveniente 😔 Vamos a revisar tu caso de inmediato.\nUno de mis compañeros del equipo humano te escribirá por aquí en breve 💙`
+      `Lamentamos el inconveniente 😔 Vamos a revisar tu caso de inmediato.\nUn especialista de nuestro equipo te escribirá por aquí en breve 💙`
     );
 
   // ── Confirmaciones finales ───────────────────────────────────────────────

@@ -88,7 +88,7 @@ async function _registrarFalloCorreo(phone, session) {
     await sendText(
       phone,
       `Parece que estás teniendo dificultades para ingresar tu correo 😊\n` +
-      `Uno de mis compañeros del equipo humano te escribirá por aquí para ayudarte directamente.`
+      `Un especialista de nuestro equipo te escribirá por aquí para ayudarte directamente.`
     );
     updateSession(phone, { ultimoTema: 'correo_no_encontrado' });
     await runTransfer(phone, { ...session, ultimoTema: 'correo_no_encontrado' });
