@@ -293,6 +293,41 @@ app.post('/webhook/chatwoot', webhookLimiter, (req, res) => {
       return;
     }
 
+    // ── [DEBUG] Logger espía para Meta Flow responses ────────────────────────
+    // Activo solo con DEBUG_FLOW_RESPONSE=true en .env
+    // Imprime el payload completo cuando detecta una respuesta de Flow.
+    if (
+      process.env.DEBUG_FLOW_RESPONSE === 'true' &&
+      event === 'message_created' &&
+      payload.message_type === 'incoming'
+    ) {
+      const content    = (payload.content || '').toLowerCase();
+      const isFlowResp = content.includes('respuesta enviada') ||
+                         content.includes('response sent')     ||
+                         payload.content_type === 'input_csat' ||
+                         payload.content_attributes?.type === 'input_select' ||
+                         payload.content_attributes?.items !== undefined;
+
+      if (isFlowResp || process.env.DEBUG_FLOW_RESPONSE === 'verbose') {
+        log.info('debug-flow', '══ META FLOW RESPONSE PAYLOAD COMPLETO ══', {
+          event,
+          content:            payload.content,
+          content_type:       payload.content_type,
+          content_attributes: payload.content_attributes,
+          source_id:          payload.source_id || payload.id,
+          message_type:       payload.message_type,
+          sender:             payload.sender,
+          conversation_id:    payload.conversation?.id,
+          // Campos que Meta podría inyectar vía Chatwoot
+          additional_attributes: payload.additional_attributes,
+          meta:               payload.meta,
+          raw_payload_keys:   Object.keys(payload),
+        });
+        // Dump completo por si algún campo está anidado inesperadamente
+        console.log('[debug-flow] RAW PAYLOAD:\n' + JSON.stringify(payload, null, 2));
+      }
+    }
+
     // ── Mensaje nuevo del alumno ─────────────────────────────────────────────
     if (event === 'message_created') {
 
