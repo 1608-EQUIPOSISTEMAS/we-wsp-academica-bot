@@ -7,7 +7,7 @@ const { sendText, sendTextDirect, sendButtons, sendList } = require('./services/
 const { buildProgramRows, PAGE_SIZE }     = require('./utils/programList');
 const { detectIntent }            = require('./services/ai');
 const { runTransfer }             = require('./flows/transfer');
-const { showMenu, showMenuAcademico, showMenuPagos, handleMenuPrincipalReply } = require('./flows/menu');
+const { showMenu, showFallbackMenu, handleMenuPrincipalReply } = require('./flows/menu');
 const {
   startIdentificacion,
   handleCorreo,
@@ -44,7 +44,8 @@ const TEXT_TO_ID = {
   // ── Submenú Académico y Gestión ─────────────────────────────────────────
   '🖥️ Campus y Materiales':               'campus_materiales',
   '💻 Campus y Materiales':               'campus_materiales',
-  '📅 Cronograma':                         'cronograma',
+  '📅 Cronograma de clases':               'cronograma',
+  '📅 Cronograma':                         'cronograma',   // fallback título viejo
   '📝 Exámenes Internac.':                 'examenes_int',
   '📝 Exámenes Int.':                      'examenes_int',   // fallback título viejo
   '🎓 Certificación':                      'certificacion',
@@ -742,10 +743,8 @@ async function handleMenuOption(phone, optionId, session) {
     case 'examenes_int':      return showExamenes(phone);
 
     case 'menu_academico':
-      return showMenuAcademico(phone, session);
-
     case 'menu_pagos':
-      return showMenuPagos(phone);
+      return showMenu(phone, session.nombre);
 
     // ── Pagos — candado inteligente ─────────────────────────────────────────
     case 'estado_cuenta':
@@ -874,21 +873,6 @@ async function handleCsatReply(phone, rating, session) {
   }
 
   deleteSession(phone);
-}
-
-// ── Nivel 3: fallback al menú de categorías ───────────────────────────────────
-
-async function showFallbackMenu(phone) {
-  updateSession(phone, { estado: 'flow_menu_principal' });
-  await sendButtons(
-    phone,
-    `No entendí bien tu mensaje 😊\n¿En qué podemos ayudarte?`,
-    [
-      { id: 'menu_academico', title: '📚 Académico' },
-      { id: 'menu_pagos',     title: '💳 Pagos' },
-      { id: 'hablar_asesor',  title: '💬 Con un asesor' },
-    ]
-  );
 }
 
 module.exports = { handleIncoming };

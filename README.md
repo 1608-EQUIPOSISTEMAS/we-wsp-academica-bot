@@ -47,6 +47,7 @@ Completar cada variable:
 
 Conectarse al contenedor PostgreSQL y ejecutar:
 
+
 ```sql
 CREATE TABLE IF NOT EXISTS bot_email_enrollment (
   id         SERIAL PRIMARY KEY,

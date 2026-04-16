@@ -1,4 +1,5 @@
 const { sendText, sendButtons, delay }        = require('../services/whatsapp');
+const { showMenu }                            = require('./menu');
 const { findAlumnoByEmail,
         checkAndUpdateMembership }            = require('../services/database');
 const { syncStudentFromOdoo }                 = require('../services/odoo');
@@ -196,16 +197,9 @@ async function handleCorreo(phone, email, session) {
       ? `¡Hola ${primerNombre}! Qué gusto saludar a un miembro ${membershipTier} 🖤 ¿En qué puedo ayudarte hoy?`
       : `¡Hola ${primerNombre}! 👋 Te encontré en el sistema. ¿En qué te puedo ayudar hoy?`;
 
-    await delay(500);
-    await sendButtons(
-      phone,
-      saludoTexto,
-      [
-        { id: 'menu_academico', title: '📚 Académico' },
-        { id: 'menu_pagos',     title: '💳 Pagos' },
-        { id: 'hablar_asesor',  title: '💬 Con un asesor' },
-      ]
-    );
+    await sendText(phone, saludoTexto);
+    await delay(800);
+    await showMenu(phone, primerNombre);
   } else {
     const transferido = await _registrarFalloCorreo(phone, session);
     if (transferido) return;
