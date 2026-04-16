@@ -563,6 +563,12 @@ app.post('/webhook/meta', webhookLimiter, async (req, res) => {
 
   const body = req.body;
 
+  // ── [DEBUG TEMPORAL] Dump completo del payload de Meta ────────────────────
+  console.log('=============================================');
+  console.log('[META DIRECTO] Recibido POST en /webhook/meta');
+  console.log(JSON.stringify(body, null, 2));
+  console.log('=============================================');
+
   // 2. Proxy transparente → reenviar a Chatwoot sin bloquear
   const chatwootWebhookUrl = process.env.CHATWOOT_META_WEBHOOK_URL;
   if (chatwootWebhookUrl) {
