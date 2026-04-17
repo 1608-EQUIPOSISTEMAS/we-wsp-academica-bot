@@ -283,6 +283,38 @@ async function sendBase64Pdf(phone, base64String, filename, caption) {
   }
 }
 
+/**
+ * Envía un mensaje interactivo de Meta Flow al alumno.
+ * @param {string} phone     — número sin '+'
+ * @param {string} flowId    — ID del Flow en Meta
+ * @param {string} header    — título del mensaje
+ * @param {string} body      — cuerpo del mensaje
+ * @param {string} footer    — pie del mensaje
+ * @param {string} ctaLabel  — texto del botón de apertura del flow
+ */
+async function sendFlow(phone, flowId, header, body, footer, ctaLabel) {
+  await metaSend({
+    messaging_product: 'whatsapp',
+    recipient_type:    'individual',
+    to:   phone,
+    type: 'interactive',
+    interactive: {
+      type: 'flow',
+      header: { type: 'text', text: header },
+      body:   { text: body },
+      footer: { text: footer },
+      action: {
+        name: 'flow',
+        parameters: {
+          flow_message_version: '3',
+          flow_id:  flowId,
+          flow_cta: ctaLabel,
+        },
+      },
+    },
+  });
+}
+
 async function sendCtaUrl(phone, bodyText, displayText, url) {
   // 1. Mensaje interactivo CTA via Meta API
   await metaSend({
@@ -304,4 +336,4 @@ async function sendCtaUrl(phone, bodyText, displayText, url) {
     .catch(err => console.error('[whatsapp] Error en nota privada CTA:', err));
 }
 
-module.exports = { sendText, sendTextDirect, sendButtons, sendButtonsWithHeader, sendList, sendCtaUrl, sendBase64Pdf, delay };
+module.exports = { sendText, sendTextDirect, sendButtons, sendButtonsWithHeader, sendList, sendCtaUrl, sendBase64Pdf, sendFlow, delay, getOriginalMetaMessage };

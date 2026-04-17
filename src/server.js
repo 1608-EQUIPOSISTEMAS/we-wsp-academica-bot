@@ -558,10 +558,6 @@ app.get('/webhook/meta', (req, res) => {
 });
 
 app.post('/webhook/meta', webhookLimiter, async (req, res) => {
-  console.log('🔴🔴🔴 INTERCEPCIÓN EN /webhook/meta 🔴🔴🔴');
-  console.log(JSON.stringify(req.body, null, 2));
-  console.log('🔴🔴🔴 FIN INTERCEPCIÓN 🔴🔴🔴');
-
   // 1. Respuesta inmediata a Meta (requerido en < 20s)
   res.sendStatus(200);
 
