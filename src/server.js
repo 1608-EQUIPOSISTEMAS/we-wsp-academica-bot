@@ -7,7 +7,7 @@ const { handleIncoming }                                         = require('./bo
 const { postMessage, updateLabels }                              = require('./services/chatwoot');
 const { getSession, deleteSession, updateSession,
         updateSessionByConvId, getAllSessions }                  = require('./services/session');
-const { sendText, sendList, getOriginalMetaMessage }             = require('./services/whatsapp');
+const { sendText, sendList }                                     = require('./services/whatsapp');
 const { startInactivityWatcher }                                 = require('./services/inactivity');
 const { handleMetaFlowResponse }                                 = require('./services/metaWebhook');
 const log                                                        = require('./utils/logger');
@@ -391,31 +391,28 @@ app.post('/webhook/chatwoot', webhookLimiter, (req, res) => {
       }
       if (rateResult === 'blocked') return;
 
-      // ── Intercepción de Meta Flow via Graph API ──────────────────────────────
-      // Chatwoot recibe el nfm_reply pero descarta el response_json.
-      // Detectamos: contenido nulo + source_id con formato wamid.
-      const sourceId = payload.source_id;
-      const content  = payload.content || '';
-      const isFlowResponse = sourceId &&
-        sourceId.startsWith('wamid.') &&
-        (!content || content === 'Respuesta enviada' || content === 'Response Sent');
+      // ── Intercepción de Meta Flow (nfm_reply) ─────────────────────────────────
+      // Chatwoot (parcheado) envía el response_json como content del mensaje.
+      // Detectamos: content que es un JSON válido con al menos una key de flow.
+      const content = (payload.content || '').trim();
+      let flowData  = null;
 
-      if (isFlowResponse) {
-        // DUMP temporal para inspeccionar qué trae Chatwoot en el payload del Flow
-        console.log('[meta-flow] PAYLOAD COMPLETO:\n' + JSON.stringify(payload, null, 2));
-        log.info('meta-flow', 'Flow response detectado — consultando Graph API', { phone, sourceId });
-        getOriginalMetaMessage(sourceId).then(async (metaMsg) => {
-          const nfmReply = metaMsg?.interactive?.nfm_reply;
-          if (!nfmReply) {
-            log.warn('meta-flow', 'Graph API no retornó nfm_reply', { phone, sourceId, type: metaMsg?.type });
-            return;
+      if (content.startsWith('{') && content.endsWith('}')) {
+        try {
+          const parsed = JSON.parse(content);
+          // response_json de Meta Flows siempre tiene "flow_token" o keys del formulario
+          if (parsed.flow_token || Object.keys(parsed).length >= 2) {
+            flowData = parsed;
           }
-          let flowData;
-          try { flowData = JSON.parse(nfmReply.response_json || '{}'); }
-          catch (e) { log.error('meta-flow', 'Error parseando response_json', { phone }); return; }
-          log.info('meta-flow', 'nfm_reply extraído', { phone, fields: Object.keys(flowData) });
-          await handleMetaFlowResponse(phone, flowData);
-        }).catch(err => log.error('meta-flow', 'Error consultando Graph API', { phone, error: err.message }));
+        } catch (_) { /* no es JSON — continuar flujo normal */ }
+      }
+
+      if (flowData) {
+        log.info('meta-flow', 'Flow response detectado via Chatwoot patch', {
+          phone, fields: Object.keys(flowData),
+        });
+        handleMetaFlowResponse(phone, flowData)
+          .catch(err => log.error('meta-flow', 'Error procesando flow response', { phone, error: err.message }));
         return;
       }
 
