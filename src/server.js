@@ -4,7 +4,7 @@ const rateLimit = require('express-rate-limit');
 const axios     = require('axios');
 
 const { handleIncoming }                                         = require('./bot');
-const { postMessage, updateLabels }                              = require('./services/chatwoot');
+const { postMessage, updateLabels, updateMessageContent }        = require('./services/chatwoot');
 const { getSession, deleteSession, updateSession,
         updateSessionByConvId, getAllSessions }                  = require('./services/session');
 const { sendText, sendList }                                     = require('./services/whatsapp');
@@ -411,6 +411,26 @@ app.post('/webhook/chatwoot', webhookLimiter, (req, res) => {
         log.info('meta-flow', 'Flow response detectado via Chatwoot patch', {
           phone, fields: Object.keys(flowData),
         });
+
+        // Reemplazar JSON crudo por texto legible en la conversación de Chatwoot
+        const msgId = payload.id;
+        if (msgId && conversationId) {
+          const LABELS = {
+            tipo_examen: 'Tipo de examen', dias: 'Días disponibles',
+            horario: 'Horario tentativo', simulador: 'Simulador de práctica (S/50)',
+            tipo: 'Tipo', sesion: 'Sesión', motivo: 'Motivo', comentario: 'Comentario',
+          };
+          const lines = ['📋 *Formulario enviado por el alumno*\n'];
+          for (const [k, v] of Object.entries(flowData)) {
+            if (k === 'flow_token') continue;
+            const label = LABELS[k] || k;
+            const val   = Array.isArray(v) ? v.join(', ') : String(v);
+            lines.push(`• *${label}:* ${val}`);
+          }
+          updateMessageContent(conversationId, msgId, lines.join('\n'))
+            .catch(err => log.error('meta-flow', 'Error actualizando mensaje', { error: err.message }));
+        }
+
         handleMetaFlowResponse(phone, flowData)
           .catch(err => log.error('meta-flow', 'Error procesando flow response', { phone, error: err.message }));
         return;

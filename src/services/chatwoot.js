@@ -282,6 +282,22 @@ function tagAlumno(phone, nombre, correo) {
   });
 }
 
+/**
+ * Actualiza el contenido de un mensaje existente en Chatwoot.
+ * Útil para reemplazar el JSON crudo de un Meta Flow por texto formateado.
+ */
+async function updateMessageContent(conversationId, messageId, content) {
+  try {
+    await axios.patch(
+      apiUrl(`/accounts/${ACCOUNT_ID}/conversations/${conversationId}/messages/${messageId}`),
+      { content },
+      { headers: getHeaders() }
+    );
+  } catch (err) {
+    console.error('[chatwoot] Error updateMessageContent:', err.response?.data || err.message);
+  }
+}
+
 module.exports = {
   postMessage,
   addPrivateNote,
@@ -299,4 +315,5 @@ module.exports = {
   checkAgentReplied,
   tagFlow,
   tagAlumno,
+  updateMessageContent,
 };

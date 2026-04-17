@@ -15,7 +15,7 @@ const {
 } = require('./flows/identificacion');
 const { showCampus, handleCampusReply }                  = require('./flows/campus');
 const { showCertificados, handleCertReply, handleCertSearch } = require('./flows/certificados');
-const { showJustificaciones, handleJustificacionReply }  = require('./flows/justificaciones');
+const { showJustificaciones, handleJustificacionProgramaReply, handleJustificacionFlowResponse } = require('./flows/justificaciones');
 const { showExamenes, handleExamenesReply }              = require('./flows/examenes');
 const { showMateriales, handleMaterialesReply }          = require('./flows/materiales');
 const { showInstaladores, handleInstaladoresReply }      = require('./flows/instaladores');
@@ -592,8 +592,11 @@ async function route(phone, session, { text, buttonId, listId }) {
     }
 
     // ── Justificaciones ────────────────────────────────────────────────────
-    case 'flow_justificacion_info':
-      if (id) return handleJustificacionReply(phone, id, session);
+    case 'flow_justificacion_programa':
+      if (id) return handleJustificacionProgramaReply(phone, id, session);
+      return;
+    case 'flow_justificacion_flow':
+      // Esperando respuesta del Meta Flow — se procesa en metaWebhook
       return;
 
     // ── Exámenes Internacionales ───────────────────────────────────────────

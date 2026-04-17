@@ -1,23 +1,21 @@
 const { addPrivateNote } = require('./chatwoot');
 const { getSession }     = require('./session');
 const { runTransfer }    = require('../flows/transfer');
+const { handleJustificacionFlowResponse } = require('../flows/justificaciones');
 const log                = require('../utils/logger');
 
-// ── Etiquetas legibles para los campos del Flow ───────────────────────────────
-const FIELD_LABELS = {
+// ── Etiquetas legibles para los campos del Flow de Exámenes ──────────────────
+const EXAM_LABELS = {
   tipo_examen: 'Tipo de examen',
   dias:        'Días disponibles',
   horario:     'Horario tentativo',
   simulador:   'Simulador de práctica (S/50)',
 };
 
-/**
- * Convierte el objeto de respuesta del Flow en una nota privada formateada.
- */
-function _buildSummary(data) {
+function _buildExamSummary(data) {
   const lines = ['📊 *Solicitud de Examen Internacional (Meta Flow)*\n'];
   for (const [key, value] of Object.entries(data)) {
-    const label = FIELD_LABELS[key] || key;
+    const label = EXAM_LABELS[key] || key;
     const val   = Array.isArray(value) ? value.join(', ') : String(value);
     lines.push(`• *${label}:* ${val}`);
   }
@@ -25,40 +23,47 @@ function _buildSummary(data) {
 }
 
 /**
- * Procesa la respuesta de un Meta Flow de examen internacional.
- *
- * @param {string} phone    - Teléfono normalizado (sin +, ej: "51922495159")
- * @param {Object} flowData - Objeto parseado del response_json del nfm_reply
+ * Router central de Meta Flows.
+ * Detecta qué Flow respondió el alumno según los campos del payload
+ * y delega al handler correspondiente.
  */
 async function handleMetaFlowResponse(phone, flowData) {
   const session = getSession(phone);
-  const convId  = session?.conversationId;
-  const summary = _buildSummary(flowData);
 
-  log.info('meta-flow', 'Flow response procesado', {
-    phone,
-    convId,
-    tipoExamen: flowData.tipo_examen || 'N/A',
-    simulador:  flowData.simulador   || 'N/A',
-  });
-
-  // ── Inyectar nota privada en la conversación activa ───────────────────────
-  if (convId) {
-    await addPrivateNote(convId, summary).catch(err =>
-      log.error('meta-flow', 'Error añadiendo nota privada', {
-        phone, convId, error: err.message,
-      })
-    );
-  } else {
-    log.warn('meta-flow', 'Sin conversationId en sesión — nota privada omitida', { phone });
+  // ── Flow de Justificaciones (tiene campo "tipo" con falta/tardanza + "sesion") ──
+  if (flowData.tipo && flowData.sesion && flowData.motivo) {
+    log.info('meta-flow', 'Flow de Justificación detectado', { phone, tipo: flowData.tipo });
+    return handleJustificacionFlowResponse(phone, flowData, session);
   }
 
-  // ── Transferir a asesor con contexto del examen ───────────────────────────
-  await runTransfer(
-    phone,
-    { ...session, ultimoTema: 'examenes_int', conversationId: convId },
-    `Flow completado — Examen: ${flowData.tipo_examen || 'N/A'}`
-  );
+  // ── Flow de Exámenes Internacionales (tiene campo "tipo_examen") ──
+  if (flowData.tipo_examen) {
+    const convId  = session?.conversationId;
+    const summary = _buildExamSummary(flowData);
+
+    log.info('meta-flow', 'Flow de Examen detectado', {
+      phone, convId,
+      tipoExamen: flowData.tipo_examen,
+    });
+
+    if (convId) {
+      await addPrivateNote(convId, summary).catch(err =>
+        log.error('meta-flow', 'Error añadiendo nota privada', { phone, convId, error: err.message })
+      );
+    }
+
+    await runTransfer(
+      phone,
+      { ...session, ultimoTema: 'examenes_int', conversationId: convId },
+      `Flow completado — Examen: ${flowData.tipo_examen}`
+    );
+    return;
+  }
+
+  // ── Flow no reconocido ──
+  log.warn('meta-flow', 'Flow response con campos no reconocidos', {
+    phone, fields: Object.keys(flowData),
+  });
 }
 
 module.exports = { handleMetaFlowResponse };

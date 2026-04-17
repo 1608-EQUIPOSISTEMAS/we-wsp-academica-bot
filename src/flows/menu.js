@@ -13,7 +13,7 @@ async function showMenu(phone, nombre) {
     'Ver opciones',
     [
       {
-        title: '📚 Académico',
+        title: '📚 Académica',
         rows: [
           { id: 'campus_materiales',  title: '💻 Campus y Materiales', description: 'Encuentra el enlace directo para acceder a tus clases y recursos.' },
           { id: 'certificacion',      title: '🎓 Certificación',        description: 'Descarga diplomas emitidos o reporta inconvenientes con tus documentos.' },
