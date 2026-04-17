@@ -461,6 +461,50 @@ async function testConnection() {
   console.log('[database] Conexión a PostgreSQL OK');
 }
 
+// ── Verified Phones (sesión persistente 1 mes) ───────────────────────────────
+
+/**
+ * Busca un teléfono verificado que aún no haya expirado.
+ * @param {string} phone — número sin '+'
+ * @returns {Object|null}
+ */
+async function findVerifiedPhone(phone) {
+  const { rows } = await pool.query(
+    `SELECT phone, correo, nombre, student_id, membership_tier, is_member, verified
+     FROM verified_phones
+     WHERE phone = $1 AND expires_at > NOW()`,
+    [phone]
+  );
+  return rows[0] || null;
+}
+
+/**
+ * Guarda o actualiza un teléfono verificado. Expira en 1 mes.
+ */
+async function saveVerifiedPhone({ phone, correo, nombre, studentId, membershipTier, isMember, verified }) {
+  await pool.query(
+    `INSERT INTO verified_phones (phone, correo, nombre, student_id, membership_tier, is_member, verified, verified_at, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW() + INTERVAL '1 month')
+     ON CONFLICT (phone) DO UPDATE SET
+       correo          = EXCLUDED.correo,
+       nombre          = EXCLUDED.nombre,
+       student_id      = EXCLUDED.student_id,
+       membership_tier = EXCLUDED.membership_tier,
+       is_member       = EXCLUDED.is_member,
+       verified        = EXCLUDED.verified,
+       verified_at     = NOW(),
+       expires_at      = NOW() + INTERVAL '1 month'`,
+    [phone, correo, nombre, studentId, membershipTier || null, isMember || false, verified || false]
+  );
+}
+
+/**
+ * Elimina un teléfono verificado (para el botón "No soy [nombre]").
+ */
+async function deleteVerifiedPhone(phone) {
+  await pool.query('DELETE FROM verified_phones WHERE phone = $1', [phone]);
+}
+
 module.exports = {
   findAlumnoByEmail,
   findMembershipByEmail,
@@ -476,6 +520,9 @@ module.exports = {
   findProgramVersionByAbbreviation,
   getStudentCronograma,
   getProgramModules,
+  findVerifiedPhone,
+  saveVerifiedPhone,
+  deleteVerifiedPhone,
   runMigration,
   testConnection,
   pool,

@@ -1,7 +1,10 @@
 const { sendText, sendButtons, delay }        = require('../services/whatsapp');
 const { showMenu }                            = require('./menu');
 const { findAlumnoByEmail,
-        checkAndUpdateMembership }            = require('../services/database');
+        checkAndUpdateMembership,
+        findVerifiedPhone,
+        saveVerifiedPhone,
+        deleteVerifiedPhone }                 = require('../services/database');
 const { syncStudentFromOdoo }                 = require('../services/odoo');
 const { updateSession }                       = require('../services/session');
 const { tagFlow, tagAlumno }                  = require('../services/chatwoot');
@@ -21,6 +24,77 @@ function _toFirstName(fullName) {
   if (!fullName) return '';
   const first = String(fullName).trim().split(/\s+/)[0];
   return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
+}
+
+/**
+ * Intenta reconocer al alumno por su teléfono (sesión persistente de 1 mes).
+ * Si lo encuentra, saluda por nombre y va directo al menú.
+ * Retorna true si lo reconoció (el caller debe hacer return).
+ */
+async function tryQuickGreeting(phone) {
+  let record;
+  try {
+    record = await findVerifiedPhone(phone);
+  } catch (err) {
+    console.error('[identificacion] Error buscando verified phone:', err.message);
+    return false;
+  }
+
+  if (!record) return false;
+
+  const primerNombre = _toFirstName(record.nombre);
+
+  updateSession(phone, {
+    nombre:        record.nombre,
+    correo:        record.correo,
+    studentId:     record.student_id,
+    verified:      record.verified,
+    isMember:      record.is_member,
+    membershipTier: record.membership_tier,
+    estado:        'menu',
+  });
+  tagAlumno(phone, record.nombre, record.correo);
+  tagFlow(phone, ['bot-activo']);
+
+  const tierEmoji = { 'WE BLACK': '🖤', 'WE GOLD': '✨', 'WE PLAT': '🥈' };
+  const saludoTexto = (record.verified && record.is_member)
+    ? `¡${primerNombre}! Qué gusto saludar a un miembro ${record.membership_tier} ${tierEmoji[record.membership_tier] ?? '⭐'} ¿En qué puedo ayudarte hoy?`
+    : `¡${primerNombre}! 👋 Qué gusto verte de nuevo. ¿En qué puedo ayudarte hoy?`;
+
+  // Título del botón "No soy X" — máx 20 chars en WhatsApp
+  const noSoyLabel = `No soy ${primerNombre}`.length > 18
+    ? 'No soy yo'
+    : `No soy ${primerNombre}`;
+
+  await sendButtons(
+    phone,
+    saludoTexto,
+    [
+      { id: 'quick_ver_menu',  title: '📚 Ver menú' },
+      { id: 'quick_no_soy_yo', title: `🔄 ${noSoyLabel}` },
+    ]
+  );
+
+  return true;
+}
+
+/**
+ * Handler del saludo rápido: "Ver menú" o "No soy [nombre]".
+ */
+async function handleQuickGreetingReply(phone, buttonId, session) {
+  if (buttonId === 'quick_ver_menu') {
+    updateSession(phone, { estado: 'menu' });
+    const primerNombre = _toFirstName(session.nombre);
+    await showMenu(phone, primerNombre);
+  } else if (buttonId === 'quick_no_soy_yo') {
+    // Borrar registro persistente y arrancar identificación desde cero
+    try { await deleteVerifiedPhone(phone); } catch (_) {}
+    updateSession(phone, {
+      nombre: null, correo: null, studentId: null,
+      verified: false, isMember: false, membershipTier: null,
+    });
+    await startIdentificacion(phone);
+  }
 }
 
 async function startIdentificacion(phone) {
@@ -193,6 +267,12 @@ async function handleCorreo(phone, email, session) {
     });
     tagAlumno(phone, alumno.full_name, alumno.email);
 
+    // ── Persistir sesión verificada (1 mes) ─────────────────────────────────
+    saveVerifiedPhone({
+      phone, correo: alumno.email, nombre: alumno.full_name,
+      studentId: alumno.id, membershipTier, isMember, verified,
+    }).catch(err => console.error('[identificacion] Error guardando verified phone:', err.message));
+
     const tierEmoji = { 'WE BLACK': '🖤', 'WE GOLD': '✨', 'WE PLAT': '🥈' };
     const saludoTexto = (verified && isMember)
       ? `¡${primerNombre}! Qué gusto saludar a un miembro ${membershipTier} ${tierEmoji[membershipTier] ?? '⭐'} ¿En qué puedo ayudarte hoy?`
@@ -227,4 +307,4 @@ async function handleCorreoNoEncontrado(phone, buttonId, session) {
   }
 }
 
-module.exports = { startIdentificacion, handleCorreo, handleCorreoNoEncontrado };
+module.exports = { startIdentificacion, handleCorreo, handleCorreoNoEncontrado, tryQuickGreeting, handleQuickGreetingReply };
