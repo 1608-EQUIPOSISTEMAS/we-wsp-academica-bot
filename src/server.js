@@ -401,6 +401,8 @@ app.post('/webhook/chatwoot', webhookLimiter, (req, res) => {
         (!content || content === 'Respuesta enviada' || content === 'Response Sent');
 
       if (isFlowResponse) {
+        // DUMP temporal para inspeccionar qué trae Chatwoot en el payload del Flow
+        console.log('[meta-flow] PAYLOAD COMPLETO:\n' + JSON.stringify(payload, null, 2));
         log.info('meta-flow', 'Flow response detectado — consultando Graph API', { phone, sourceId });
         getOriginalMetaMessage(sourceId).then(async (metaMsg) => {
           const nfmReply = metaMsg?.interactive?.nfm_reply;
