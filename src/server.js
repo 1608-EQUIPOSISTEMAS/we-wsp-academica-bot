@@ -7,7 +7,7 @@ const { handleIncoming }                                         = require('./bo
 const { postMessage, updateLabels }                              = require('./services/chatwoot');
 const { getSession, deleteSession, updateSession,
         updateSessionByConvId, getAllSessions }                  = require('./services/session');
-const { sendText, sendList }                                     = require('./services/whatsapp');
+const { sendText, sendList, getOriginalMetaMessage }             = require('./services/whatsapp');
 const { startInactivityWatcher }                                 = require('./services/inactivity');
 const { handleMetaFlowResponse }                                 = require('./services/metaWebhook');
 const log                                                        = require('./utils/logger');
@@ -390,6 +390,32 @@ app.post('/webhook/chatwoot', webhookLimiter, (req, res) => {
         return;
       }
       if (rateResult === 'blocked') return;
+
+      // ── Intercepción de Meta Flow via Graph API ──────────────────────────────
+      // Chatwoot recibe el nfm_reply pero descarta el response_json.
+      // Detectamos: contenido nulo + source_id con formato wamid.
+      const sourceId = payload.source_id;
+      const content  = payload.content || '';
+      const isFlowResponse = sourceId &&
+        sourceId.startsWith('wamid.') &&
+        (!content || content === 'Respuesta enviada' || content === 'Response Sent');
+
+      if (isFlowResponse) {
+        log.info('meta-flow', 'Flow response detectado — consultando Graph API', { phone, sourceId });
+        getOriginalMetaMessage(sourceId).then(async (metaMsg) => {
+          const nfmReply = metaMsg?.interactive?.nfm_reply;
+          if (!nfmReply) {
+            log.warn('meta-flow', 'Graph API no retornó nfm_reply', { phone, sourceId, type: metaMsg?.type });
+            return;
+          }
+          let flowData;
+          try { flowData = JSON.parse(nfmReply.response_json || '{}'); }
+          catch (e) { log.error('meta-flow', 'Error parseando response_json', { phone }); return; }
+          log.info('meta-flow', 'nfm_reply extraído', { phone, fields: Object.keys(flowData) });
+          await handleMetaFlowResponse(phone, flowData);
+        }).catch(err => log.error('meta-flow', 'Error consultando Graph API', { phone, error: err.message }));
+        return;
+      }
 
       const msg = {
         id:                payload.id,
