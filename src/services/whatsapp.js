@@ -336,4 +336,25 @@ async function sendCtaUrl(phone, bodyText, displayText, url) {
     .catch(err => console.error('[whatsapp] Error en nota privada CTA:', err));
 }
 
+/**
+ * Recupera el mensaje original de Meta por su wamid.
+ * Útil para obtener el nfm_reply completo que Chatwoot descarta.
+ * @param {string} wamid — ID del mensaje en formato "wamid.xxx..."
+ * @returns {Promise<Object|null>}
+ */
+async function getOriginalMetaMessage(wamid) {
+  try {
+    const url = `${META_BASE}/${wamid}`;
+    const { data } = await axios.get(url, {
+      headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}` },
+      timeout: 8000,
+    });
+    return data;
+  } catch (err) {
+    const detail = err.response?.data || err.message;
+    console.error('[whatsapp] Error consultando mensaje por wamid:', JSON.stringify(detail));
+    return null;
+  }
+}
+
 module.exports = { sendText, sendTextDirect, sendButtons, sendButtonsWithHeader, sendList, sendCtaUrl, sendBase64Pdf, sendFlow, delay, getOriginalMetaMessage };
