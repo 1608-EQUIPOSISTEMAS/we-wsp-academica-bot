@@ -563,6 +563,17 @@ app.post('/webhook/meta', webhookLimiter, async (req, res) => {
 
   const body = req.body;
 
+  // ── Log de entrada para diagnóstico ─────────────────────────────────────────
+  const incomingMessages = body?.entry?.[0]?.changes?.[0]?.value?.messages || [];
+  log.info('meta-webhook', 'POST recibido', {
+    entries:  (body?.entry || []).length,
+    msgCount: incomingMessages.length,
+    types:    incomingMessages.map(m => m.type),
+    interactiveTypes: incomingMessages
+      .filter(m => m.type === 'interactive')
+      .map(m => m.interactive?.type),
+  });
+
   // 2. Proxy transparente → reenviar a Chatwoot sin bloquear
   const chatwootWebhookUrl = process.env.CHATWOOT_META_WEBHOOK_URL;
   if (chatwootWebhookUrl) {

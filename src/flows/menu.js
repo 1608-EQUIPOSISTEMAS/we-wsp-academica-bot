@@ -16,7 +16,7 @@ async function showMenu(phone, nombre) {
         title: '📚 Académico',
         rows: [
           { id: 'campus_materiales',  title: '💻 Campus y Materiales', description: 'Encuentra el enlace directo para acceder a tus clases y recursos.' },
-          { id: 'certificacion',      title: '🎓 Certificación',        description: 'Descarga tus diplomas emitidos o reporta inconvenientes con tus documentos.' },
+          { id: 'certificacion',      title: '🎓 Certificación',        description: 'Descarga diplomas emitidos o reporta inconvenientes con tus documentos.' },
           { id: 'cronograma',         title: '📅 Cronograma de clases', description: 'Revisa los módulos activos y las fechas de inicio de tus programas.' },
           { id: 'justificaciones',    title: '⚠️ Justificaciones',      description: 'Reporta inasistencias o solicita prórrogas por motivos de fuerza mayor.' },
           { id: 'inscribirme',        title: '➕ Inscribirme',          description: 'Conoce nuestra oferta académica y anótate a un nuevo programa.' },
