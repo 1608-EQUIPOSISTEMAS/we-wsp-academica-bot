@@ -1,5 +1,5 @@
-const { sendText, sendButtons, delay }        = require('../services/whatsapp');
-const { showMenu }                            = require('./menu');
+const { sendText, sendButtons, sendList, delay } = require('../services/whatsapp');
+const { showMenu, getMenuSections }           = require('./menu');
 const { findAlumnoByEmail,
         checkAndUpdateMembership,
         findVerifiedPhone,
@@ -28,7 +28,7 @@ function _toFirstName(fullName) {
 
 /**
  * Intenta reconocer al alumno por su teléfono (sesión persistente de 1 mes).
- * Si lo encuentra, saluda por nombre y va directo al menú.
+ * Si lo encuentra, muestra saludo + menú en un solo mensaje de lista.
  * Retorna true si lo reconoció (el caller debe hacer return).
  */
 async function tryQuickGreeting(phone) {
@@ -61,40 +61,42 @@ async function tryQuickGreeting(phone) {
     ? `¡${primerNombre}! Qué gusto saludar a un miembro ${record.membership_tier} ${tierEmoji[record.membership_tier] ?? '⭐'} ¿En qué puedo ayudarte hoy?`
     : `¡${primerNombre}! 👋 Qué gusto verte de nuevo. ¿En qué puedo ayudarte hoy?`;
 
-  // Título del botón "No soy X" — máx 20 chars en WhatsApp
-  const noSoyLabel = `No soy ${primerNombre}`.length > 18
-    ? 'No soy yo'
-    : `No soy ${primerNombre}`;
+  // Menú completo + opción "No soy yo" (máx 10 rows en WhatsApp)
+  const sections = getMenuSections();
+  // Reemplazar "Contacto asesor" por "No soy yo" para respetar el límite de 10 rows
+  const academica = sections[0];
+  const asesorIdx = academica.rows.findIndex(r => r.id === 'hablar_asesor');
+  if (asesorIdx !== -1) academica.rows.splice(asesorIdx, 1);
+  // Agregar "No soy yo" a la última sección (título máx 24 chars)
+  const noSoyTitle = `No soy ${primerNombre}`.length > 22
+    ? '🔄 No soy yo'
+    : `🔄 No soy ${primerNombre}`;
+  sections[sections.length - 1].rows.push(
+    { id: 'quick_no_soy_yo', title: noSoyTitle, description: 'Identificarme con otro correo.' }
+  );
 
-  await sendButtons(
+  await sendList(
     phone,
+    'W|E Educación Ejecutiva',
     saludoTexto,
-    [
-      { id: 'quick_ver_menu',  title: '📚 Ver menú' },
-      { id: 'quick_no_soy_yo', title: `🔄 ${noSoyLabel}` },
-    ]
+    'Selecciona una opción para continuar.',
+    'Ver opciones',
+    sections
   );
 
   return true;
 }
 
 /**
- * Handler del saludo rápido: "Ver menú" o "No soy [nombre]".
+ * Handler: si el alumno elige "No soy [nombre]" del menú rápido.
  */
-async function handleQuickGreetingReply(phone, buttonId, session) {
-  if (buttonId === 'quick_ver_menu') {
-    updateSession(phone, { estado: 'menu' });
-    const primerNombre = _toFirstName(session.nombre);
-    await showMenu(phone, primerNombre);
-  } else if (buttonId === 'quick_no_soy_yo') {
-    // Borrar registro persistente y arrancar identificación desde cero
-    try { await deleteVerifiedPhone(phone); } catch (_) {}
-    updateSession(phone, {
-      nombre: null, correo: null, studentId: null,
-      verified: false, isMember: false, membershipTier: null,
-    });
-    await startIdentificacion(phone);
-  }
+async function handleQuickNoSoyYo(phone) {
+  try { await deleteVerifiedPhone(phone); } catch (_) {}
+  updateSession(phone, {
+    nombre: null, correo: null, studentId: null,
+    verified: false, isMember: false, membershipTier: null,
+  });
+  await startIdentificacion(phone);
 }
 
 async function startIdentificacion(phone) {
@@ -307,4 +309,4 @@ async function handleCorreoNoEncontrado(phone, buttonId, session) {
   }
 }
 
-module.exports = { startIdentificacion, handleCorreo, handleCorreoNoEncontrado, tryQuickGreeting, handleQuickGreetingReply };
+module.exports = { startIdentificacion, handleCorreo, handleCorreoNoEncontrado, tryQuickGreeting, handleQuickNoSoyYo };

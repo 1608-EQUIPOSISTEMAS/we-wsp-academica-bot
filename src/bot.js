@@ -13,7 +13,7 @@ const {
   handleCorreo,
   handleCorreoNoEncontrado,
   tryQuickGreeting,
-  handleQuickGreetingReply,
+  handleQuickNoSoyYo,
 } = require('./flows/identificacion');
 const { showCampus, handleCampusReply }                  = require('./flows/campus');
 const { showCertificados, handleCertReply, handleCertSearch } = require('./flows/certificados');
@@ -355,21 +355,9 @@ async function route(phone, session, { text, buttonId, listId }) {
     case 'inicio': {
       // Intentar saludo rápido (sesión persistente de 1 mes)
       const recognized = await tryQuickGreeting(phone);
-      if (recognized) {
-        updateSession(phone, { estado: 'quick_greeting' });
-        return;
-      }
+      if (recognized) return; // tryQuickGreeting ya puso estado='menu'
       return startIdentificacion(phone);
     }
-
-    case 'quick_greeting':
-      if (id) return handleQuickGreetingReply(phone, id, session);
-      // Si escribe texto libre en vez de presionar botón → mostrar menú
-      if (text && session.nombre) {
-        updateSession(phone, { estado: 'menu' });
-        return showMenu(phone, session.nombre);
-      }
-      return;
 
     // ── En atención humana — bot silenciado salvo palabras reservadas ─────────
     case 'en_atencion_humana':
@@ -762,6 +750,9 @@ async function handleMenuOption(phone, optionId, session) {
     case 'inscribirme':
     case 'inscripcion':       return showInscripcion(phone, session);
     case 'examenes_int':      return showExamenes(phone);
+
+    case 'quick_no_soy_yo':
+      return handleQuickNoSoyYo(phone);
 
     case 'menu_academico':
     case 'menu_pagos':

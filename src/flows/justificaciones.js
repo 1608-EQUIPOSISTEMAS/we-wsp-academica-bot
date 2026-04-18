@@ -126,14 +126,20 @@ async function handleJustificacionProgramaReply(phone, id, session) {
     },
   });
 
-  await sendFlow(
-    phone,
-    FLOW_ID_JUSTIFICACION,
-    'Justificación 📋',
-    `Programa: *${_cleanVersion(program.program_name)}*\n\nCompleta el formulario para registrar tu justificación.\n\n⚠️ Recuerda: el límite es de 2 justificaciones por curso.`,
-    'W|E Educación Ejecutiva',
-    'Completar formulario'
-  );
+  try {
+    await sendFlow(
+      phone,
+      FLOW_ID_JUSTIFICACION,
+      'Justificación 📋',
+      `Programa: *${_cleanVersion(program.program_name)}*\n\nCompleta el formulario para registrar tu justificación.\n\n⚠️ Recuerda: el límite es de 2 justificaciones por curso.`,
+      'W|E Educación Ejecutiva',
+      'Llenar justificación'
+    );
+  } catch (err) {
+    console.error('[justificaciones] Error enviando Flow:', err.response?.data || err.message);
+    await sendText(phone, '⚠️ Hubo un problema al abrir el formulario. Voy a conectarte con un especialista.');
+    return runTransfer(phone, { ...session, ultimoTema: 'justificaciones' });
+  }
 }
 
 // ── Paso 3: Respuesta del Meta Flow recibida ─────────────────────────────────
