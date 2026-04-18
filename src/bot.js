@@ -599,7 +599,7 @@ async function route(phone, session, { text, buttonId, listId }) {
 
     // ── Justificaciones ────────────────────────────────────────────────────
     case 'flow_justificacion_programa':
-      if (id) return handleJustificacionProgramaReply(phone, id, session);
+      if (id || text) return handleJustificacionProgramaReply(phone, id || text, session);
       return;
     case 'flow_justificacion_flow':
       // Esperando respuesta del Meta Flow — se procesa en metaWebhook

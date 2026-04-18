@@ -107,10 +107,19 @@ async function showJustificaciones(phone, session) {
 
 // ── Paso 2: Alumno seleccionó programa → lanzar Meta Flow ────────────────────
 
-async function handleJustificacionProgramaReply(phone, id, session) {
-  const editionId = parseInt(id.replace('just_prog_', ''), 10);
-  const programs  = session.justificacionOptions || [];
-  const program   = programs.find(p => Number(p.program_edition_id) === editionId);
+async function handleJustificacionProgramaReply(phone, idOrText, session) {
+  const programs = session.justificacionOptions || [];
+  let program;
+
+  if (idOrText && idOrText.startsWith('just_prog_')) {
+    // Match por id (cuando Chatwoot envía content_attributes.id)
+    const editionId = parseInt(idOrText.replace('just_prog_', ''), 10);
+    program = programs.find(p => Number(p.program_edition_id) === editionId);
+  } else {
+    // Match por título renderizado (cuando Chatwoot solo envía texto)
+    const input = (idOrText || '').trim().toUpperCase();
+    program = programs.find(p => (p.renderedTitle || '').toUpperCase() === input);
+  }
 
   if (!program) {
     await sendText(phone, '⚠️ No pudimos identificar ese programa. Intenta de nuevo.');
