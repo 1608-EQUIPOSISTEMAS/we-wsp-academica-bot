@@ -7,7 +7,7 @@ const { sendText, sendTextDirect, sendButtons, sendList } = require('./services/
 const { buildProgramRows, PAGE_SIZE }     = require('./utils/programList');
 const { detectIntent }            = require('./services/ai');
 const { runTransfer }             = require('./flows/transfer');
-const { showMenu, showFallbackMenu, handleMenuPrincipalReply } = require('./flows/menu');
+const { showMenu, showFallbackMenu } = require('./flows/menu');
 const {
   startIdentificacion,
   handleCorreo,
@@ -251,7 +251,12 @@ async function handleIncoming(conversationId, phone, msg) {
   markProcessed(msg.id);
 
   const isNewSession = !getSession(phone);
-  const session = updateSession(phone, { conversationId, ultimaActividad: Date.now() });
+  const session = updateSession(phone, {
+    conversationId,
+    ultimaActividad: Date.now(),
+    bot_inactivity_warn1_sent: false,
+    bot_inactivity_warn2_sent: false,
+  });
 
   // La conversación se queda en PENDING mientras el bot atiende.
   // Se pasa a OPEN solo al hacer transfer humano (ver transfer.js).
@@ -457,12 +462,6 @@ async function route(phone, session, { text, buttonId, listId }) {
       }
       return;
 
-    // ── Menú de dos niveles ────────────────────────────────────────────────
-    case 'flow_menu_principal':
-      if (id)   return handleMenuPrincipalReply(phone, id, session);
-      if (text) return handleFreeText(phone, text, session);
-      return;
-
     // ── ¿Algo más? — confirmación de cierre bot ────────────────────────────
     case 'resuelto_bot':
       if (id) return handleBotResuelto(phone, id, session);
@@ -586,6 +585,29 @@ async function route(phone, session, { text, buttonId, listId }) {
       if (id === 'bot_resuelto_no' || id === 'bot_resuelto_menu')
         return handleBotResuelto(phone, id, session);
       if (id) return handleCertReply(phone, id, session);
+      return;
+
+    // ── Certificación — "No aparece mi cert" (usuario verificado) ──────────
+    case 'flow_cert_no_aparece_modalidad': {
+      const noap_mod = id || { '🏫 Pres. / En vivo': 'noap_pres', '💻 Online': 'noap_online' }[text];
+      if (noap_mod) return handleCertReply(phone, noap_mod, session);
+      return;
+    }
+    case 'flow_cert_no_aparece_tipo': {
+      const noap_tipo = id || {
+        '📘 Curso': session.noap_modalidad === 'online' ? 'noap_online_curso' : 'noap_pres_curso',
+        '📗 Espec./Dipl./PEE': 'noap_pres_prog',
+        '📗 Especialización': 'noap_online_espec',
+      }[text];
+      if (noap_tipo) return handleCertReply(phone, noap_tipo, session);
+      return;
+    }
+    case 'flow_cert_no_aparece_plazo':
+      if (id === 'bot_resuelto_no' || id === 'bot_resuelto_menu')
+        return handleBotResuelto(phone, id, session);
+      if (id) return handleCertReply(phone, id, session);
+      if (text === '✅ Aún en el plazo') return handleCertReply(phone, 'noap_en_plazo', session);
+      if (text === '⚠️ Ya pasó el plazo') return handleCertReply(phone, 'noap_fuera_plazo', session);
       return;
 
     case 'flow_cert_tipo': {

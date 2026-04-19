@@ -29,6 +29,8 @@ function createSession(phone) {
     ultimaActividad:     Date.now(), // última vez que el alumno envió un mensaje
     resuelto_bot_at:     null,   // timestamp cuando se preguntó "¿Algo más?"
     estado_inactividad:  null,   // null | 'advertido' | 'resuelto'
+    bot_inactivity_warn1_sent: false,  // CASO 0A: primer aviso bot enviado
+    bot_inactivity_warn2_sent: false,  // CASO 0B: segundo aviso bot enviado
     ultimaInteraccion:   Date.now(),
     // ── Identificación y verificación ──────────────────────────────────────
     verified:            false,  // true si phone de sesión coincide con phone en DB

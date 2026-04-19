@@ -461,6 +461,75 @@ async function testConnection() {
   console.log('[database] Conexión a PostgreSQL OK');
 }
 
+// ── Programas justificables (en vivo, en curso, hijos de diplomados) ─────────
+
+/**
+ * Retorna los programas EN_VIVO/PRESENCIAL que están actualmente en curso
+ * para registrar justificaciones.
+ * - Cursos sueltos: start_date <= hoy <= end_date
+ * - Diplomados: NO aparecen — se "explotan" en sus módulos hijos activos
+ */
+async function getJustificablePrograms(studentId) {
+  const { rows } = await pool.query(
+    `-- 1. Cursos sueltos en curso (que NO sean padres de un diplomado)
+     SELECT
+       sp.program_edition_id,
+       p.program_name,
+       pv.abbreviation,
+       pe.start_date,
+       pe.end_date
+     FROM ods_student_programs  sp
+     JOIN program_editions       pe  ON pe.edition_num_id     = sp.program_edition_id
+     JOIN program_versions       pv  ON pv.program_version_id = pe.program_version_id
+     JOIN programs               p   ON p.program_id          = pv.program_id
+     WHERE sp.student_id          = $1
+       AND sp.modality             IN ('EN_VIVO', 'PRESENCIAL')
+       AND sp.program_edition_id  IS NOT NULL
+       AND pe.active              = 'Y'
+       AND pe.start_date         <= CURRENT_DATE
+       AND pe.end_date           >= CURRENT_DATE
+       -- Excluir padres (diplomados que tienen hijos)
+       AND NOT EXISTS (
+         SELECT 1 FROM edition_structure es
+         WHERE es.parent_edition_id = sp.program_edition_id
+       )
+       -- Excluir hijos cuando el alumno está inscrito en el padre
+       -- (se traen abajo con la segunda query)
+       AND NOT EXISTS (
+         SELECT 1
+         FROM edition_structure    es
+         JOIN ods_student_programs osp_parent
+           ON es.parent_edition_id = osp_parent.program_edition_id
+         WHERE es.child_edition_id  = sp.program_edition_id
+           AND osp_parent.student_id = sp.student_id
+       )
+
+     UNION ALL
+
+     -- 2. Hijos de diplomados en curso
+     SELECT
+       pe_child.edition_num_id  AS program_edition_id,
+       p_child.program_name,
+       pv_child.abbreviation,
+       pe_child.start_date,
+       pe_child.end_date
+     FROM ods_student_programs  sp
+     JOIN edition_structure      es  ON es.parent_edition_id  = sp.program_edition_id
+     JOIN program_editions       pe_child ON pe_child.edition_num_id = es.child_edition_id
+     JOIN program_versions       pv_child ON pv_child.program_version_id = pe_child.program_version_id
+     JOIN programs               p_child  ON p_child.program_id  = pv_child.program_id
+     WHERE sp.student_id          = $1
+       AND sp.modality             IN ('EN_VIVO', 'PRESENCIAL')
+       AND pe_child.active        = 'Y'
+       AND pe_child.start_date   <= CURRENT_DATE
+       AND pe_child.end_date     >= CURRENT_DATE
+
+     ORDER BY start_date ASC`,
+    [studentId]
+  );
+  return rows;
+}
+
 // ── Verified Phones (sesión persistente 1 mes) ───────────────────────────────
 
 /**
@@ -520,6 +589,7 @@ module.exports = {
   findProgramVersionByAbbreviation,
   getStudentCronograma,
   getProgramModules,
+  getJustificablePrograms,
   findVerifiedPhone,
   saveVerifiedPhone,
   deleteVerifiedPhone,

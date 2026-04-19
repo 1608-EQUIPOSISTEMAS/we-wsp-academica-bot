@@ -38,7 +38,9 @@ const TRANSFER_WAIT_MS    = TEST_MODE ?  2 * 60 * 1000 :  5 * 60 * 1000; // CASO
 const HUMAN_WARN_MS       = TEST_MODE ?  3 * 60 * 1000 : 15 * 60 * 1000; // CASO 3
 const HUMAN_CLOSE_MS      = TEST_MODE ?  2 * 60 * 1000 : 20 * 60 * 1000; // CASO 4
 const CSAT_TIMEOUT_MS     = TEST_MODE ?  2 * 60 * 1000 : 10 * 60 * 1000; // CASO 5
-const BOT_ABANDON_MS      = TEST_MODE ?  5 * 60 * 1000 : 60 * 60 * 1000; // CASO 0: sesión bot abandonada sin respuesta
+const BOT_WARN1_MS        = TEST_MODE ?  3 * 60 * 1000 : 15 * 60 * 1000; // CASO 0A: "¿Sigues ahí?"
+const BOT_WARN2_MS        = TEST_MODE ?  4 * 60 * 1000 : 25 * 60 * 1000; // CASO 0B: "Voy a cerrar pronto..."
+const BOT_ABANDON_MS      = TEST_MODE ?  5 * 60 * 1000 : 30 * 60 * 1000; // CASO 0C: cierre definitivo
 const ASESOR_WARN_MS      = TEST_MODE ?  3 * 60 * 1000 :  30 * 60 * 1000; // CASO 3B: nota privada al asesor
 const ASESOR_ALUMNO_MS    = TEST_MODE ?  4 * 60 * 1000 :  60 * 60 * 1000; // CASO 3B: msg al alumno
 const ASESOR_NEVER_MS     = TEST_MODE ? 10 * 60 * 1000 : 24 * 60 * 60 * 1000; // CASO 2B: asesor nunca respondió
@@ -50,7 +52,7 @@ function _mins(ms) { return ms == null ? 'N/A' : Math.floor((Date.now() - ms) / 
 function startInactivityWatcher() {
   if (TEST_MODE) {
     console.log('[inactivity] ⚠️  TEST MODE activo — tiempos reducidos:');
-    console.log(`  CASO0=${BOT_ABANDON_MS/60000}m  CASO1=${BOT_IDLE_MS/60000}m  CASO2=${TRANSFER_WAIT_MS/60000}m  CASO2B=${ASESOR_NEVER_MS/60000}m  CASO3=${HUMAN_WARN_MS/60000}m  CASO3B-nota=${ASESOR_WARN_MS/60000}m  CASO3B-msg=${ASESOR_ALUMNO_MS/60000}m  CASO3B-cierre=${ASESOR_CLOSE_MS/60000}m  CASO4=${HUMAN_CLOSE_MS/60000}m  CASO5=${CSAT_TIMEOUT_MS/60000}m  CASO-FH=${FUERA_HORARIO_MS/60000}m`);
+    console.log(`  CASO0A=${BOT_WARN1_MS/60000}m  CASO0B=${BOT_WARN2_MS/60000}m  CASO0C=${BOT_ABANDON_MS/60000}m  CASO1=${BOT_IDLE_MS/60000}m  CASO2=${TRANSFER_WAIT_MS/60000}m  CASO2B=${ASESOR_NEVER_MS/60000}m  CASO3=${HUMAN_WARN_MS/60000}m  CASO3B-nota=${ASESOR_WARN_MS/60000}m  CASO3B-msg=${ASESOR_ALUMNO_MS/60000}m  CASO3B-cierre=${ASESOR_CLOSE_MS/60000}m  CASO4=${HUMAN_CLOSE_MS/60000}m  CASO5=${CSAT_TIMEOUT_MS/60000}m  CASO-FH=${FUERA_HORARIO_MS/60000}m`);
   }
 
   setInterval(() => runInactivityCycle(), INTERVAL_MS);
@@ -86,28 +88,75 @@ async function runInactivityCycle() {
         tiempoDesdeInteraccion: _mins(session.ultimaInteraccion),
       });
 
-      // ── CASO 0 — Sesión bot abandonada ────────────────────────────────────
-      // El alumno abrió el chat pero dejó de responder en mitad del flujo del bot.
-      // Aplica a cualquier estado que NO tenga su propio timer (no es resuelto_bot,
-      // esperando_csat, ni en atención humana).
+      // ── CASO 0 — Sesión bot sin respuesta (3 etapas) ──────────────────────
+      // El alumno dejó de responder en mitad del flujo del bot.
+      // Aplica a cualquier estado que NO tenga su propio timer.
       if (
         !session.en_atencion_humana &&
         session.estado !== 'resuelto_bot' &&
-        session.estado !== 'esperando_csat' &&
-        now - (session.ultimaActividad || session.ultimaInteraccion || 0) >= BOT_ABANDON_MS
+        session.estado !== 'esperando_csat'
       ) {
-        console.log(`[inactivity] CASO0 sesión bot abandonada: phone=${phone} estado=${session.estado} inactivo=${_mins(session.ultimaActividad)}`);
-        if (session.conversationId) {
-          addPrivateNote(
-            session.conversationId,
-            `🤖 Sesión del bot cerrada automáticamente por inactividad (Timeout de ${TEST_MODE ? '5' : '60'}m).\n` +
-            `Estado al cerrar: ${session.estado}`
-          ).catch(err => console.error('[inactivity] Error CASO0 nota privada:', err.message));
-          resolveConversation(session.conversationId)
-            .catch(err => console.error('[inactivity] Error CASO0 resolveConversation:', err.message));
+        const inactivoBot = now - (session.ultimaActividad || session.ultimaInteraccion || 0);
+
+        // ── CASO 0C — Cierre definitivo (30 min / 5 min test) ───────────────
+        if (session.bot_inactivity_warn2_sent && inactivoBot >= BOT_ABANDON_MS) {
+          console.log(`[inactivity] CASO0C cierre bot: phone=${phone} estado=${session.estado} inactivo=${_mins(session.ultimaActividad)}`);
+          try {
+            await sendText(
+              phone,
+              `Cerramos esta conversación por inactividad 😊\n` +
+              `Cuando necesites ayuda, escríbenos de nuevo. ¡Hasta pronto! 💙\n\n` +
+              `*W|E Educación Ejecutiva*`
+            );
+          } catch (err) {
+            console.error('[inactivity] Error CASO0C mensaje:', err.message);
+          }
+          if (session.conversationId) {
+            addPrivateNote(
+              session.conversationId,
+              `🤖 Sesión del bot cerrada por inactividad (${Math.floor(inactivoBot / 60000)} min sin respuesta).\n` +
+              `Estado al cerrar: ${session.estado}`
+            ).catch(err => console.error('[inactivity] Error CASO0C nota privada:', err.message));
+            updateLabels(session.conversationId, { add: ['resuelto-inactividad'] })
+              .catch(err => console.error('[inactivity] Error CASO0C labels:', err.message));
+            resolveConversation(session.conversationId)
+              .catch(err => console.error('[inactivity] Error CASO0C resolveConversation:', err.message));
+          }
+          deleteSession(phone);
+          continue;
         }
-        deleteSession(phone);
-        continue;
+
+        // ── CASO 0B — Segundo aviso (25 min / 4 min test) ───────────────────
+        if (session.bot_inactivity_warn1_sent && !session.bot_inactivity_warn2_sent && inactivoBot >= BOT_WARN2_MS) {
+          console.log(`[inactivity] CASO0B segundo aviso: phone=${phone} inactivo=${_mins(session.ultimaActividad)}`);
+          updateSession(phone, { bot_inactivity_warn2_sent: true });
+          try {
+            await sendText(
+              phone,
+              `Como no hemos recibido respuesta, cerraremos esta conversación en unos minutos ⏳\n` +
+              `Si necesitas algo, escríbeme y con gusto te ayudo 😊`
+            );
+          } catch (err) {
+            console.error('[inactivity] Error CASO0B mensaje:', err.message);
+          }
+          continue;
+        }
+
+        // ── CASO 0A — Primer aviso (15 min / 3 min test) ────────────────────
+        if (!session.bot_inactivity_warn1_sent && inactivoBot >= BOT_WARN1_MS) {
+          console.log(`[inactivity] CASO0A primer aviso: phone=${phone} estado=${session.estado} inactivo=${_mins(session.ultimaActividad)}`);
+          updateSession(phone, { bot_inactivity_warn1_sent: true });
+          try {
+            await sendText(
+              phone,
+              `¿Sigues ahí? 😊\n` +
+              `Noto que llevas un momento sin responder. Estoy aquí para ayudarte cuando estés listo/a ⏳`
+            );
+          } catch (err) {
+            console.error('[inactivity] Error CASO0A mensaje:', err.message);
+          }
+          continue;
+        }
       }
 
       // ── CASO 1 — resuelto_bot ──────────────────────────────────────────────

@@ -3,7 +3,7 @@ const { updateSession }                = require('../services/session');
 const { tagFlow, addPrivateNote }      = require('../services/chatwoot');
 const { runTransfer }                  = require('./transfer');
 const { showMenu }                     = require('./menu');
-const { getStudentCronograma }         = require('../services/database');
+const { getJustificablePrograms }      = require('../services/database');
 
 const FLOW_ID_JUSTIFICACION = '938590465470633';
 
@@ -38,7 +38,7 @@ async function showJustificaciones(phone, session) {
 
   let programs;
   try {
-    programs = await getStudentCronograma(session.studentId);
+    programs = await getJustificablePrograms(session.studentId);
   } catch (err) {
     console.error('[justificaciones] Error consultando programas:', err.message);
     return runTransfer(phone, { ...session, ultimoTema: 'justificaciones' });

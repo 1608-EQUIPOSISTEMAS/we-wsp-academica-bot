@@ -228,21 +228,8 @@ async function handleCorreo(phone, email, session) {
   }
 
   if (alumno) {
-    // ── Verificación de número (transparente — sin mensaje al alumno) ────────
-    const sessionPhone  = normalizePhone(phone);
-    const dbPhone       = normalizePhone(alumno.phone);
-    const devBypass     = process.env.DEV_BYPASS_PHONE
-      ? sessionPhone.endsWith(normalizePhone(process.env.DEV_BYPASS_PHONE))
-      : false;
-    const verified = devBypass || (
-      sessionPhone.length > 0 && dbPhone.length > 0 &&
-      (sessionPhone === dbPhone ||
-       sessionPhone.endsWith(dbPhone) ||
-       dbPhone.endsWith(sessionPhone))
-    );
-
-    if (devBypass) console.log(`[identificacion] DEV_BYPASS_PHONE activo — verified forzado (sesión=${sessionPhone})`);
-    else           console.log(`[identificacion] phone verificado: ${verified} (sesión=${sessionPhone}, db=${dbPhone})`);
+    // ── Verificación: con correo válido basta ──────────────────────────────
+    const verified = true;
 
     // ── Verificar membresía VIP ───────────────────────────────────────────────
     let isMember       = false;

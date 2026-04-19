@@ -21,7 +21,6 @@ function getMenuSections() {
       title: '💳 Finanzas',
       rows: [
         { id: 'estado_cuenta',      title: '📊 Estado de Cuenta',    description: 'Consulta tus cuotas y saldo pendiente.' },
-        { id: 'enviar_comprobante', title: '🧾 Enviar Comprobante',  description: 'Registra y confirma tu pago.' },
       ],
     },
     {
@@ -47,25 +46,16 @@ async function showMenu(phone, nombre) {
 }
 
 // ── Fallback (cuando el bot no entiende un mensaje libre) ─────────────────────
-// Muestra 3 botones rápidos; si el alumno elige uno, se muestra el menú unificado.
 async function showFallbackMenu(phone) {
-  updateSession(phone, { estado: 'flow_menu_principal' });
-  await sendButtons(
+  updateSession(phone, { estado: 'menu' });
+  await sendList(
     phone,
-    `No entendí bien tu mensaje 😊\n¿En qué podemos ayudarte?`,
-    [
-      { id: 'menu_academico', title: '📚 Académico' },
-      { id: 'menu_pagos',     title: '💳 Pagos / Soporte' },
-      { id: 'hablar_asesor',  title: '💬 Con un asesor' },
-    ]
+    'W|E Educación Ejecutiva',
+    'No entendí bien tu mensaje 😊\n¿En qué podemos ayudarte?',
+    'Selecciona una opción para continuar.',
+    'Ver opciones',
+    getMenuSections()
   );
 }
 
-// ── Handler del fallback (botones) ───────────────────────────────────────────
-async function handleMenuPrincipalReply(phone, input, session) {
-  if (input === 'hablar_asesor') return runTransfer(phone, session);
-  // Cualquier otra selección (menu_academico, menu_pagos) → menú unificado
-  return showMenu(phone, session.nombre);
-}
-
-module.exports = { showMenu, showFallbackMenu, handleMenuPrincipalReply, getMenuSections };
+module.exports = { showMenu, showFallbackMenu, getMenuSections };

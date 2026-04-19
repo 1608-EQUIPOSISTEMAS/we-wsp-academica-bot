@@ -450,8 +450,87 @@ async function handleCertReply(phone, buttonId, session) {
     return;
   }
 
-  // ── No aparece → lista de programas del alumno ───────────────────────────
+  // ── No aparece → primero mostrar plazos de generación ────────────────────
   if (buttonId === 'cert_no_aparece') {
+    updateSession(phone, { estado: 'flow_cert_no_aparece_modalidad' });
+    await sendText(
+      phone,
+      `Antes de escalar tu caso, revisemos los plazos de emisión 📋\n\n` +
+      `Los certificados tienen un tiempo de generación que varía según el tipo de programa y modalidad.`
+    );
+    await delay(800);
+    await sendButtons(
+      phone,
+      `¿Tu programa es presencial/en vivo u online?`,
+      [
+        { id: 'noap_pres',   title: '🏫 Pres. / En vivo' },
+        { id: 'noap_online', title: '💻 Online' },
+      ]
+    );
+    return;
+  }
+
+  // ── No aparece — Paso 2: tipo de programa ──────────────────────────────
+  if (buttonId === 'noap_pres') {
+    updateSession(phone, { estado: 'flow_cert_no_aparece_tipo', noap_modalidad: 'pres' });
+    await sendButtons(
+      phone,
+      `¿Es un curso o un programa (Especialización/Diplomado/PEE)?`,
+      [
+        { id: 'noap_pres_curso', title: '📘 Curso' },
+        { id: 'noap_pres_prog',  title: '📗 Espec./Dipl./PEE' },
+      ]
+    );
+    return;
+  }
+  if (buttonId === 'noap_online') {
+    updateSession(phone, { estado: 'flow_cert_no_aparece_tipo', noap_modalidad: 'online' });
+    await sendButtons(
+      phone,
+      `¿Es un curso o una especialización?`,
+      [
+        { id: 'noap_online_curso',  title: '📘 Curso' },
+        { id: 'noap_online_espec',  title: '📗 Especialización' },
+      ]
+    );
+    return;
+  }
+
+  // ── No aparece — Paso 3: mostrar plazo y preguntar si ya pasó ──────────
+  if (buttonId?.startsWith('noap_') && CERT_INFO[buttonId.replace('noap_', 'cert_')]) {
+    const info = CERT_INFO[buttonId.replace('noap_', 'cert_')];
+    updateSession(phone, { estado: 'flow_cert_no_aparece_plazo' });
+    await sendButtons(
+      phone,
+      `📅 El plazo de emisión para este tipo de programa es de *${info.dias}* desde que finalizó tu programa.\n\n` +
+      `📌 Lo recibirás en ${info.donde}\n` +
+      `ℹ️ ${info.nota}\n\n` +
+      `¿Ya pasaron esos días hábiles y aún no aparece tu certificado?`,
+      [
+        { id: 'noap_en_plazo',    title: '✅ Aún en el plazo' },
+        { id: 'noap_fuera_plazo', title: '⚠️ Ya pasó el plazo' },
+      ]
+    );
+    return;
+  }
+
+  // ── No aparece — Aún en plazo → informar y resuelto ────────────────────
+  if (buttonId === 'noap_en_plazo') {
+    tagFlow(phone, ['resuelto-bot', 'certificados']);
+    await sendText(
+      phone,
+      `¡Tranquilo/a! 😊 Tu certificado se está generando dentro del plazo normal.\n\n` +
+      `Cuando esté listo, podrás descargarlo desde:\n` +
+      `🔗 https://we-educacion.com/web/login → *Mis Certificados*\n\n` +
+      `Si después del plazo indicado aún no lo ves, no dudes en escribirnos de nuevo 💙`
+    );
+    await delay(800);
+    await showBotResuelto(phone);
+    return;
+  }
+
+  // ── No aparece — Fuera de plazo → lista de programas + transfer ────────
+  if (buttonId === 'noap_fuera_plazo') {
     let programs = [];
     try {
       programs = await getAllStudentPrograms(session.studentId);
@@ -469,7 +548,7 @@ async function handleCertReply(phone, buttonId, session) {
     }
 
     const programsWithTitle = programs.map(p => ({ ...p, renderedTitle: _buildRowTitle(p) }));
-    updateSession(phone, { certAvanzadoOptions: programsWithTitle });
+    updateSession(phone, { estado: 'flow_cert_avanzado', certAvanzadoOptions: programsWithTitle });
 
     const rows = programsWithTitle.slice(0, 9).map((p, i) => ({
       id:          `cert_avanzado_${i}`,
@@ -485,7 +564,7 @@ async function handleCertReply(phone, buttonId, session) {
     await sendList(
       phone,
       'Mis Programas',
-      `¿Para cuál de tus programas necesitas el certificado? 🎓`,
+      `Lamentamos el inconveniente 😔 ¿Para cuál programa necesitas el certificado?`,
       'W|E Educación Ejecutiva',
       '🎓 Ver programas',
       [{ title: 'Tus programas', rows }]

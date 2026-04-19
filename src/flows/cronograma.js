@@ -154,7 +154,7 @@ async function handleCronograma(phone, session) {
   await sendList(
     phone,
     'Mis Programas',
-    `Aquí tienes el detalle de tus programas Presenciales y En Vivo activos. 📅👇\n\n💡 Dato: Si buscas tus cursos Online, recuerda que esos viven directamente en tu Campus Virtual.`,
+    `Aquí tienes el detalle de tus programas Presenciales y En Vivo activos. 📅👇\n\n💡 Dato: Si buscas tus cursos Online, recuerda que esos están en tu Campus Virtual.`,
     'W|E Educación Ejecutiva',
     '📅 Ver mis programas',
     sections

@@ -216,20 +216,17 @@ async function _handBackToBot(phone, session) {
   });
 
   try {
-    const { showMenu } = require('./flows/menu');
     await sendText(
       phone,
       `¡Espero que nuestro equipo te haya sido de gran ayuda! ✨ Si necesitas algo más, aquí sigo disponible para ti.`
     );
-    await showMenu(phone, session.nombre);
-    log.info('webhook', 'Hand-back al bot completado', { phone });
+    log.info('webhook', 'Hand-back al bot completado (sin menú)', { phone });
   } catch (err) {
     if (!isWindowExpiredError(err)) {
       log.error('webhook', 'Error en hand-back al bot', {
         phone, error: err.response?.data || err.message,
       });
     }
-    // Si falla el envío (ventana cerrada, etc.) limpiamos la sesión
     deleteSession(phone);
   }
 }
