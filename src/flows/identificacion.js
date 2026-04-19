@@ -45,13 +45,14 @@ async function tryQuickGreeting(phone) {
   const primerNombre = _toFirstName(record.nombre);
 
   updateSession(phone, {
-    nombre:        record.nombre,
-    correo:        record.correo,
-    studentId:     record.student_id,
-    verified:      record.verified,
-    isMember:      record.is_member,
+    nombre:         record.nombre,
+    correo:         record.correo,
+    studentId:      record.student_id,
+    odooPartnerId:  record.odoo_partner_id || null,
+    verified:       record.verified,
+    isMember:       record.is_member,
     membershipTier: record.membership_tier,
-    estado:        'menu',
+    estado:         'menu',
   });
   tagAlumno(phone, record.nombre, record.correo);
   tagFlow(phone, ['bot-activo']);
@@ -260,6 +261,7 @@ async function handleCorreo(phone, email, session) {
     saveVerifiedPhone({
       phone, correo: alumno.email, nombre: alumno.full_name,
       studentId: alumno.id, membershipTier, isMember, verified,
+      odooPartnerId: alumno.odoo_partner_id || null,
     }).catch(err => console.error('[identificacion] Error guardando verified phone:', err.message));
 
     const tierEmoji = { 'WE BLACK': '🖤', 'WE GOLD': '✨', 'WE PLAT': '🥈' };

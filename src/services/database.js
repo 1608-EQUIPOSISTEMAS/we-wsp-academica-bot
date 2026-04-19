@@ -539,7 +539,7 @@ async function getJustificablePrograms(studentId) {
  */
 async function findVerifiedPhone(phone) {
   const { rows } = await pool.query(
-    `SELECT phone, correo, nombre, student_id, membership_tier, is_member, verified
+    `SELECT phone, correo, nombre, student_id, membership_tier, is_member, verified, odoo_partner_id
      FROM verified_phones
      WHERE phone = $1 AND expires_at > NOW()`,
     [phone]
@@ -550,10 +550,10 @@ async function findVerifiedPhone(phone) {
 /**
  * Guarda o actualiza un teléfono verificado. Expira en 1 mes.
  */
-async function saveVerifiedPhone({ phone, correo, nombre, studentId, membershipTier, isMember, verified }) {
+async function saveVerifiedPhone({ phone, correo, nombre, studentId, membershipTier, isMember, verified, odooPartnerId }) {
   await pool.query(
-    `INSERT INTO verified_phones (phone, correo, nombre, student_id, membership_tier, is_member, verified, verified_at, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW() + INTERVAL '1 month')
+    `INSERT INTO verified_phones (phone, correo, nombre, student_id, membership_tier, is_member, verified, odoo_partner_id, verified_at, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW() + INTERVAL '1 month')
      ON CONFLICT (phone) DO UPDATE SET
        correo          = EXCLUDED.correo,
        nombre          = EXCLUDED.nombre,
@@ -561,9 +561,10 @@ async function saveVerifiedPhone({ phone, correo, nombre, studentId, membershipT
        membership_tier = EXCLUDED.membership_tier,
        is_member       = EXCLUDED.is_member,
        verified        = EXCLUDED.verified,
+       odoo_partner_id = EXCLUDED.odoo_partner_id,
        verified_at     = NOW(),
        expires_at      = NOW() + INTERVAL '1 month'`,
-    [phone, correo, nombre, studentId, membershipTier || null, isMember || false, verified || false]
+    [phone, correo, nombre, studentId, membershipTier || null, isMember || false, verified || false, odooPartnerId || null]
   );
 }
 
