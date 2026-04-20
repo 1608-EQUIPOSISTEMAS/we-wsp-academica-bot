@@ -61,6 +61,8 @@ const TEXT_TO_ID = {
   '📊 Estado de Cuenta':                   'estado_cuenta',
   '🧾 Enviar Comprobante':                 'enviar_comprobante',
   '💬 Hablar con asesor':                  'hablar_asesor',
+  '💬 Contacto asesor':                    'hablar_asesor',
+  '💬 Con un especialista':                'hablar_asesor',
   // ── Común (ambos submenús) ──────────────────────────────────────────────
   '🔙 Menú principal':                     'menu_principal',
   // ── Certificación — modalidad ───────────────────────────────────────────
@@ -84,6 +86,9 @@ const TEXT_TO_ID = {
   '🔍 Refinar búsqueda...':               'cert_buscar',
   '🔍 Otro / No aparece':                 'cert_avanzado_otro',
   // ── Campus / Materiales ──────────────────────────────────────────────────
+  'Ingresar al campus':                    'campus_ingreso',
+  'No veo mi programa':                    'campus_programa',
+  'Desbloqueo de campus':                  'campus_desbloqueo',
   '✅ Ya tengo acceso':                    'mat_ok',
   '✅ Pude ingresar':                      'mat_ok',
   // ── Instaladores — selector de programa ────────────────────────────────
@@ -149,6 +154,7 @@ const TEXT_TO_ID = {
   // ── Identificación ──────────────────────────────────────────────────────
   'Intentar otro correo':                  'reintentar_correo',
   'Hablar con un asesor':                  'hablar_asesor',
+  '🔄 No soy yo':                         'quick_no_soy_yo',
 };
 
 // ── Normalización flexible de texto ──────────────────────────────────────────
@@ -600,13 +606,23 @@ async function route(phone, session, { text, buttonId, listId }) {
       return;
 
     // ── Certificación — "No aparece mi cert" (usuario verificado) ──────────
+    // TEXT_TO_ID puede convertir títulos compartidos a cert_* en vez de noap_*,
+    // por eso mapeamos ambos IDs (noap_ directo + cert_ vía TEXT_TO_ID).
     case 'flow_cert_no_aparece_modalidad': {
-      const noap_mod = id || { '🏫 Pres. / En vivo': 'noap_pres', '💻 Online': 'noap_online' }[text];
+      const NOAP_MOD_MAP = { cert_pres_en_vivo: 'noap_pres', cert_online: 'noap_online' };
+      const noap_mod = NOAP_MOD_MAP[id] || id || { '🏫 Pres. / En vivo': 'noap_pres', '💻 Online': 'noap_online' }[text];
       if (noap_mod) return handleCertReply(phone, noap_mod, session);
       return;
     }
     case 'flow_cert_no_aparece_tipo': {
-      const noap_tipo = id || {
+      const NOAP_TIPO_MAP = {
+        cert_pres_curso:   'noap_pres_curso',
+        cert_online_curso: 'noap_online_curso',
+        cert_pres_prog:    'noap_pres_prog',
+        cert_online_espec: 'noap_online_espec',
+      };
+      const resolved = NOAP_TIPO_MAP[id] || id;
+      const noap_tipo = resolved || {
         '📘 Curso': session.noap_modalidad === 'online' ? 'noap_online_curso' : 'noap_pres_curso',
         '📗 Espec./Dipl./PEE': 'noap_pres_prog',
         '📗 Especialización': 'noap_online_espec',
@@ -614,13 +630,16 @@ async function route(phone, session, { text, buttonId, listId }) {
       if (noap_tipo) return handleCertReply(phone, noap_tipo, session);
       return;
     }
-    case 'flow_cert_no_aparece_plazo':
-      if (id === 'bot_resuelto_no' || id === 'bot_resuelto_menu')
-        return handleBotResuelto(phone, id, session);
-      if (id) return handleCertReply(phone, id, session);
+    case 'flow_cert_no_aparece_plazo': {
+      const NOAP_PLAZO_MAP = { cert_en_plazo: 'noap_en_plazo', cert_fuera_plazo: 'noap_fuera_plazo' };
+      const resolvedPlazo = NOAP_PLAZO_MAP[id] || id;
+      if (resolvedPlazo === 'bot_resuelto_no' || resolvedPlazo === 'bot_resuelto_menu')
+        return handleBotResuelto(phone, resolvedPlazo, session);
+      if (resolvedPlazo) return handleCertReply(phone, resolvedPlazo, session);
       if (text === '✅ Aún en el plazo') return handleCertReply(phone, 'noap_en_plazo', session);
       if (text === '⚠️ Ya pasó el plazo') return handleCertReply(phone, 'noap_fuera_plazo', session);
       return;
+    }
 
     case 'flow_cert_tipo': {
       // '📘 Curso' es ambiguo: presencial vs online — se resuelve con certTrack
