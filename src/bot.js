@@ -752,7 +752,8 @@ async function route(phone, session, { text, buttonId, listId }) {
     default:
       if (id)   return handleMenuOption(phone, id, session);
       // "No soy [nombre]" — título dinámico de la lista, detectar por patrón
-      if (text && normalizeText(text).startsWith('no soy'))
+      // normalizeText no quita emojis, así que limpiamos antes de comparar
+      if (text && normalizeText(text.replace(/[^\p{L}\p{N}\s]/gu, '')).startsWith('no soy'))
         return handleMenuOption(phone, 'quick_no_soy_yo', session);
       if (text) return handleFreeText(phone, text, session);
       if (session.nombre) return showMenu(phone, session.nombre);

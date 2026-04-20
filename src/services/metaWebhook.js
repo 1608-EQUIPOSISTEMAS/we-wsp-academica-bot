@@ -1,8 +1,10 @@
-const { addPrivateNote } = require('./chatwoot');
-const { getSession }     = require('./session');
-const { runTransfer }    = require('../flows/transfer');
+const { addPrivateNote, tagFlow }  = require('./chatwoot');
+const { getSession, updateSession } = require('./session');
+const { sendText, delay }         = require('./whatsapp');
+const { createSolicitud }         = require('./database');
+const { showBotResuelto }         = require('../flows/resuelto');
 const { handleJustificacionFlowResponse } = require('../flows/justificaciones');
-const log                = require('../utils/logger');
+const log                         = require('../utils/logger');
 
 // ── Deduplicación: evita procesar el mismo Flow 2 veces ─────────────────────
 // (Chatwoot parcheado y Meta webhook pueden disparar ambos)
@@ -71,17 +73,44 @@ async function handleMetaFlowResponse(phone, flowData) {
       tipoExamen: flowData.tipo_examen,
     });
 
+    // Crear ticket para seguimiento del área académica
+    let ticketNumber = null;
+    try {
+      const solicitud = await createSolicitud(
+        session.studentId,
+        convId,
+        'EXAMEN_INTERNACIONAL',
+        flowData.tipo_examen,
+        null,
+        summary,
+        phone
+      );
+      ticketNumber = solicitud.ticket_number;
+      updateSession(phone, { lastTicketNumber: ticketNumber });
+    } catch (err) {
+      log.error('meta-flow', 'Error creando ticket de examen', { phone, error: err.message });
+    }
+
     if (convId) {
-      await addPrivateNote(convId, summary).catch(err =>
+      const nota = ticketNumber
+        ? `${summary}\n\n🎫 *Ticket:* ${ticketNumber}`
+        : summary;
+      await addPrivateNote(convId, nota).catch(err =>
         log.error('meta-flow', 'Error añadiendo nota privada', { phone, convId, error: err.message })
       );
     }
 
-    await runTransfer(
-      phone,
-      { ...session, ultimoTema: 'examenes_int', conversationId: convId },
-      `Flow completado — Examen: ${flowData.tipo_examen}`
-    );
+    let msg = `✅ *¡Solicitud enviada!*\n\n` +
+      `Tu solicitud de examen *${flowData.tipo_examen}* ya fue derivada al área académica.\n\n`;
+    if (ticketNumber) msg += `🎫 Tu número de ticket: *${ticketNumber}*\n\n`;
+    msg += `Apenas tengan una respuesta, se contactarán contigo 💙`;
+
+    await sendText(phone, msg);
+
+    tagFlow(phone, ['resuelto-bot', 'examenes-int']);
+    updateSession(phone, { estado: 'resuelto_bot', resuelto_bot_at: Date.now() });
+    await delay(1500);
+    await showBotResuelto(phone);
     return;
   }
 
