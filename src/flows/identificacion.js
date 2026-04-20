@@ -269,9 +269,14 @@ async function handleCorreo(phone, email, session) {
       ? `¡${primerNombre}! Qué gusto saludar a un miembro ${membershipTier} ${tierEmoji[membershipTier] ?? '⭐'} ¿En qué puedo ayudarte hoy?`
       : `¡${primerNombre}! 👋 Te encontré en el sistema. ¿En qué te puedo ayudar hoy?`;
 
-    await sendText(phone, saludoTexto);
-    await delay(800);
-    await showMenu(phone, primerNombre);
+    await sendList(
+      phone,
+      'W|E Educación Ejecutiva',
+      saludoTexto,
+      'Selecciona una opción para continuar.',
+      'Ver opciones',
+      getMenuSections()
+    );
   } else {
     const transferido = await _registrarFalloCorreo(phone, session);
     if (transferido) return;
