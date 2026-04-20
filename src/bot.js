@@ -15,7 +15,7 @@ const {
   tryQuickGreeting,
   handleQuickNoSoyYo,
 } = require('./flows/identificacion');
-const { showCampus, handleCampusReply }                  = require('./flows/campus');
+const { showCampus, handleCampusReply, handleCampusProgramaReply } = require('./flows/campus');
 const { showCertificados, handleCertReply, handleCertSearch } = require('./flows/certificados');
 const { showJustificaciones, handleJustificacionProgramaReply, handleJustificacionFlowResponse } = require('./flows/justificaciones');
 const { showExamenes, handleExamenesReply }              = require('./flows/examenes');
@@ -492,7 +492,11 @@ async function route(phone, session, { text, buttonId, listId }) {
     // ── Campus Virtual ─────────────────────────────────────────────────────
     case 'flow_campus':
       if (id) return handleCampusReply(phone, id, session);
-      return; // texto libre ignorado — el alumno debe usar los botones
+      return;
+
+    case 'flow_campus_programa':
+      if (id || text) return handleCampusProgramaReply(phone, id || text, session);
+      return;
 
     // ── Certificación — Rama B: búsqueda libre ───────────────────────────
     case 'flow_cert_busqueda':
