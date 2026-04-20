@@ -91,10 +91,15 @@ async function runInactivityCycle() {
       // ── CASO 0 — Sesión bot sin respuesta (3 etapas) ──────────────────────
       // El alumno dejó de responder en mitad del flujo del bot.
       // Aplica a cualquier estado que NO tenga su propio timer.
+      // Estados previos a un flujo: no aplica inactividad bot
+      const SKIP_BOT_INACTIVITY = new Set([
+        'inicio', 'esperando_correo', 'correo_no_encontrado', 'menu',
+        'resuelto_bot', 'esperando_csat',
+      ]);
+
       if (
         !session.en_atencion_humana &&
-        session.estado !== 'resuelto_bot' &&
-        session.estado !== 'esperando_csat'
+        !SKIP_BOT_INACTIVITY.has(session.estado)
       ) {
         const inactivoBot = now - (session.ultimaActividad || session.ultimaInteraccion || 0);
 

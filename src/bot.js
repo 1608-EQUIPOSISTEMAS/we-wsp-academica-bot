@@ -352,6 +352,21 @@ async function route(phone, session, { text, buttonId, listId }) {
     return showMenu(phone, session.nombre);
   }
 
+  // ── IDs globales de navegación ─────────────────────────────────────────────
+  // El alumno puede presionar botones de mensajes anteriores desde cualquier
+  // estado. Estos IDs se manejan antes del switch para evitar que caigan a
+  // handlers de flujo que no los reconocen.
+  const GLOBAL_NAV_IDS = new Set([
+    'volver_menu', 'menu_principal', 'bot_resuelto_menu', 'insc_menu',
+  ]);
+  if (id && GLOBAL_NAV_IDS.has(id) && session.estado !== 'en_atencion_humana') {
+    return showMenu(phone, session.nombre);
+  }
+  if (id === 'hablar_asesor' && session.estado !== 'en_atencion_humana'
+      && session.estado !== 'menu') {
+    return handleMenuOption(phone, 'hablar_asesor', session);
+  }
+
   switch (session.estado) {
 
     case 'inicio': {
