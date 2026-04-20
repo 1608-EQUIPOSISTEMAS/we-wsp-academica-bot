@@ -63,7 +63,6 @@ const TEXT_TO_ID = {
   '💬 Hablar con asesor':                  'hablar_asesor',
   // ── Común (ambos submenús) ──────────────────────────────────────────────
   '🔙 Menú principal':                     'menu_principal',
-  '📋 Ver menú':                           'volver_menu',
   // ── Certificación — modalidad ───────────────────────────────────────────
   '🏫 Pres. / En vivo':                    'cert_pres_en_vivo',
   '💻 Online':                             'cert_online',
@@ -86,7 +85,7 @@ const TEXT_TO_ID = {
   '🔍 Otro / No aparece':                 'cert_avanzado_otro',
   // ── Campus / Materiales ──────────────────────────────────────────────────
   '✅ Ya tengo acceso':                    'mat_ok',
-  '✅ Pude ingresar bien':                 'mat_ok',
+  '✅ Pude ingresar':                      'mat_ok',
   // ── Instaladores — selector de programa ────────────────────────────────
   'SAP HANA':                              'inst_hana',
   'SAP R/3':                               'inst_r3',
@@ -111,10 +110,8 @@ const TEXT_TO_ID = {
   '🏠 Menú principal':                     'insc_menu',
   // ── Justificaciones ──────────────────────────────────────────────────────
   '✅ Listo, ya llené':                    'just_listo',
-  '✅ Ya lo completé':                     'just_listo',
   // ── Exámenes Internacionales ─────────────────────────────────────────────
   '✅ Llené el form':                      'exam_formulario_ok',
-  '✅ Ya lo completé':                     'exam_formulario_ok',
   '🆘 Necesito ayuda':                    'form_problemas',
   // ── Compartido: flujos con formulario Google ─────────────────────────────
   '⚠️ Tengo problemas':                   'form_problemas',
@@ -142,7 +139,7 @@ const TEXT_TO_ID = {
   // ── Cierre bot (resuelto_bot) ────────────────────────────────────────────
   '✅ No, es todo':                        'bot_resuelto_no',
   '✅ No, eso es todo':                    'bot_resuelto_no',
-  '📋 Ver menú':                           'bot_resuelto_menu',
+  '📋 Ver menú':                           'volver_menu',
   '🔙 Volver al menú':                    'volver_menu',
   '🎓 Otro certificado':                   'cert_ver_mas',
   // ── Micro-CSAT del bot ───────────────────────────────────────────────────

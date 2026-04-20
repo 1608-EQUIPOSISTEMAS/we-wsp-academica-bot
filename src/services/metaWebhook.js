@@ -4,6 +4,17 @@ const { runTransfer }    = require('../flows/transfer');
 const { handleJustificacionFlowResponse } = require('../flows/justificaciones');
 const log                = require('../utils/logger');
 
+// ── Deduplicación: evita procesar el mismo Flow 2 veces ─────────────────────
+// (Chatwoot parcheado y Meta webhook pueden disparar ambos)
+const _processedFlows = new Set();
+const DEDUP_TTL_MS    = 60_000; // limpiar después de 1 min
+
+function _dedupKey(phone, flowData) {
+  const keys = Object.keys(flowData).sort().join(',');
+  const vals = Object.values(flowData).map(v => Array.isArray(v) ? v.join('|') : String(v)).join(',');
+  return `${phone}:${keys}:${vals}`;
+}
+
 // ── Etiquetas legibles para los campos del Flow de Exámenes ──────────────────
 const EXAM_LABELS = {
   tipo_examen: 'Tipo de examen',
@@ -28,6 +39,15 @@ function _buildExamSummary(data) {
  * y delega al handler correspondiente.
  */
 async function handleMetaFlowResponse(phone, flowData) {
+  // ── Deduplicación ──────────────────────────────────────────────────────────
+  const key = _dedupKey(phone, flowData);
+  if (_processedFlows.has(key)) {
+    log.info('meta-flow', 'Flow duplicado ignorado', { phone });
+    return;
+  }
+  _processedFlows.add(key);
+  setTimeout(() => _processedFlows.delete(key), DEDUP_TTL_MS);
+
   const session = getSession(phone);
 
   // ── Flow de Justificaciones (tiene campo "tipo" con falta/tardanza + "sesion") ──
@@ -38,7 +58,12 @@ async function handleMetaFlowResponse(phone, flowData) {
 
   // ── Flow de Exámenes Internacionales (tiene campo "tipo_examen") ──
   if (flowData.tipo_examen) {
-    const convId  = session?.conversationId;
+    if (!session) {
+      log.warn('meta-flow', 'Flow de Examen recibido sin sesión activa', { phone });
+      return;
+    }
+
+    const convId  = session.conversationId;
     const summary = _buildExamSummary(flowData);
 
     log.info('meta-flow', 'Flow de Examen detectado', {

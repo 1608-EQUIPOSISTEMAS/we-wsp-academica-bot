@@ -1,6 +1,5 @@
-const { sendText, sendButtons, delay }        = require('../services/whatsapp');
-const { updateSession, deleteSession }        = require('../services/session');
-const { setLabels, resolveConversation }      = require('../services/chatwoot');
+const { sendButtons, delay }  = require('../services/whatsapp');
+const { updateSession }      = require('../services/session');
 
 async function showBotResuelto(phone) {
   updateSession(phone, {
