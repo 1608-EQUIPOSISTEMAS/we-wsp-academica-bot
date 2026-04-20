@@ -777,7 +777,7 @@ async function handleMenuOption(phone, optionId, session) {
     case 'campus_virtual':    return showCampus(phone, session);
     case 'certificacion':     return showCertificados(phone, session);
     case 'justificaciones':   return showJustificaciones(phone, session);
-    case 'campus_materiales':
+    case 'campus_materiales':  return showCampus(phone, session);
     case 'materiales':        return showMateriales(phone, optionId);
     case 'instaladores':      return showInstaladores(phone);
     case 'alumno_flex':       return showAlumnoFlex(phone, session);
