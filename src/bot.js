@@ -751,6 +751,9 @@ async function route(phone, session, { text, buttonId, listId }) {
     case 'menu':
     default:
       if (id)   return handleMenuOption(phone, id, session);
+      // "No soy [nombre]" — título dinámico de la lista, detectar por patrón
+      if (text && normalizeText(text).startsWith('no soy'))
+        return handleMenuOption(phone, 'quick_no_soy_yo', session);
       if (text) return handleFreeText(phone, text, session);
       if (session.nombre) return showMenu(phone, session.nombre);
       return startIdentificacion(phone);
