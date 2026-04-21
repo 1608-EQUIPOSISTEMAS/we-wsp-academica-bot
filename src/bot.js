@@ -373,6 +373,21 @@ async function route(phone, session, { text, buttonId, listId }) {
     return handleMenuOption(phone, 'hablar_asesor', session);
   }
 
+  // ── Nudge: estados que esperan botones y reciben texto libre ────────────
+  // En vez de quedarse mudo, recordar al alumno que use los botones.
+  const BUTTON_ONLY_STATES = new Set([
+    'flow_campus', 'flow_cert_modalidad', 'flow_cert_plazo', 'flow_cert_info',
+    'flow_cert_post_envio', 'flow_cert_no_aparece_modalidad', 'flow_cert_no_aparece_tipo',
+    'flow_cert_no_aparece_plazo', 'flow_examenes', 'flow_alumno_flex',
+    'flow_flex_opciones', 'flow_materiales', 'flow_inst_tipo',
+    'flow_inst_hana_clave_ok', 'flow_inst_hana_cargando_ok', 'flow_inst_r3_clave_ok',
+    'flow_inst_laptop', 'flow_inscripcion_confirm', 'flow_justificacion_flow',
+  ]);
+  if (!id && text && BUTTON_ONLY_STATES.has(session.estado)) {
+    await sendText(phone, `Por favor, selecciona una de las opciones del mensaje anterior para continuar 😊`);
+    return;
+  }
+
   switch (session.estado) {
 
     case 'inicio': {
