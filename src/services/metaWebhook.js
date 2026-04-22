@@ -1,8 +1,8 @@
-const { addPrivateNote, tagFlow }  = require('./chatwoot');
+const { addPrivateNote }           = require('./chatwoot');
 const { getSession, updateSession } = require('./session');
-const { sendText, delay }         = require('./whatsapp');
+const { sendText }                 = require('./whatsapp');
 const { createSolicitud }         = require('./database');
-const { showBotResuelto }         = require('../flows/resuelto');
+const { runTransfer }              = require('../flows/transfer');
 const { handleJustificacionFlowResponse } = require('../flows/justificaciones');
 const log                         = require('../utils/logger');
 
@@ -100,17 +100,18 @@ async function handleMetaFlowResponse(phone, flowData) {
       );
     }
 
-    let msg = `✅ *¡Solicitud enviada!*\n\n` +
-      `Tu solicitud de examen *${flowData.tipo_examen}* ya fue derivada al área académica.\n\n`;
+    let msg = `✅ *¡Solicitud registrada!*\n\n` +
+      `Tu solicitud de examen *${flowData.tipo_examen}* fue registrada correctamente.\n\n`;
     if (ticketNumber) msg += `🎫 Tu número de ticket: *${ticketNumber}*\n\n`;
-    msg += `Apenas tengan una respuesta, se contactarán contigo 💙`;
+    msg += `Te voy a derivar con un asesor para que le dé seguimiento 💙`;
 
     await sendText(phone, msg);
 
-    tagFlow(phone, ['resuelto-bot', 'examenes-int']);
-    updateSession(phone, { estado: 'resuelto_bot', resuelto_bot_at: Date.now() });
-    await delay(1500);
-    await showBotResuelto(phone);
+    await runTransfer(
+      phone,
+      { ...session, ultimoTema: 'examenes_int', conversationId: convId },
+      `Examen Internacional registrado — ${flowData.tipo_examen}${ticketNumber ? ` | Ticket: ${ticketNumber}` : ''}`
+    );
     return;
   }
 

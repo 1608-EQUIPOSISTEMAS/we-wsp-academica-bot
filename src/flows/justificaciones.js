@@ -2,7 +2,6 @@ const { sendText, sendFlow, sendList, sendButtons, delay } = require('../service
 const { updateSession }                = require('../services/session');
 const { tagFlow, addPrivateNote }      = require('../services/chatwoot');
 const { runTransfer }                  = require('./transfer');
-const { showBotResuelto }              = require('./resuelto');
 const { showMenu }                     = require('./menu');
 const { getJustificablePrograms,
         createSolicitud }              = require('../services/database');
@@ -199,19 +198,20 @@ async function handleJustificacionFlowResponse(phone, flowData, session) {
       .catch(err => console.error('[justificaciones] Error nota privada:', err));
   }
 
-  // Confirmar al alumno
-  let msg = `✅ *¡Solicitud enviada!*\n\n` +
+  // Confirmar al alumno y transferir
+  let msg = `✅ *¡Solicitud registrada!*\n\n` +
     `Tu justificación por *${flowData.tipo === 'falta' ? 'falta' : 'tardanza'}* en *${_cleanVersion(programa.name)}* ` +
-    `ya fue derivada al área académica.\n\n`;
+    `fue registrada correctamente.\n\n`;
   if (ticketNumber) msg += `🎫 Tu número de ticket: *${ticketNumber}*\n\n`;
-  msg += `Apenas tengan una respuesta, se contactarán contigo 💙`;
+  msg += `Te voy a derivar con un asesor para que le dé seguimiento 💙`;
 
   await sendText(phone, msg);
 
-  tagFlow(phone, ['resuelto-bot', 'justificaciones']);
-  updateSession(phone, { estado: 'resuelto_bot', resuelto_bot_at: Date.now() });
-  await delay(1500);
-  await showBotResuelto(phone);
+  await runTransfer(
+    phone,
+    { ...session, ultimoTema: 'justificaciones' },
+    `Justificación registrada — ${flowData.tipo === 'falta' ? 'Falta' : 'Tardanza'} en ${_cleanVersion(programa.name)}${ticketNumber ? ` | Ticket: ${ticketNumber}` : ''}`
+  );
 }
 
 module.exports = { showJustificaciones, handleJustificacionProgramaReply, handleJustificacionFlowResponse };
