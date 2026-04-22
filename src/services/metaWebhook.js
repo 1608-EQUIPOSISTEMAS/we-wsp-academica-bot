@@ -110,7 +110,8 @@ async function handleMetaFlowResponse(phone, flowData) {
     await runTransfer(
       phone,
       { ...session, ultimoTema: 'examenes_int', conversationId: convId },
-      `Examen Internacional registrado — ${flowData.tipo_examen}${ticketNumber ? ` | Ticket: ${ticketNumber}` : ''}`
+      `Examen Internacional registrado — ${flowData.tipo_examen}${ticketNumber ? ` | Ticket: ${ticketNumber}` : ''}`,
+      {skipTicket:true}
     );
     return;
   }

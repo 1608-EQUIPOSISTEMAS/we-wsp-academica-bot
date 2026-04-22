@@ -210,7 +210,8 @@ async function handleJustificacionFlowResponse(phone, flowData, session) {
   await runTransfer(
     phone,
     { ...session, ultimoTema: 'justificaciones' },
-    `Justificación registrada — ${flowData.tipo === 'falta' ? 'Falta' : 'Tardanza'} en ${_cleanVersion(programa.name)}${ticketNumber ? ` | Ticket: ${ticketNumber}` : ''}`
+    `Justificación registrada — ${flowData.tipo === 'falta' ? 'Falta' : 'Tardanza'} en ${_cleanVersion(programa.name)}${ticketNumber ? ` | Ticket: ${ticketNumber}` : ''}`,
+    { skipTicket: true }
   );
 }
 
