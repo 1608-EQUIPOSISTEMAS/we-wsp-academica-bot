@@ -920,14 +920,14 @@ const INTENT_CONFIDENCE_THRESHOLD = 0.75;
 
 async function handleFreeText(phone, text, session) {
   // Texto demasiado corto → menú directo (regla: > 8 caracteres)
-  if (!text || text.length <= 8) return showFallbackMenu(phone);
+  if (!text || text.length <= 8) return showFallbackMenu(phone, session.nombre);
 
   let result;
   try {
     result = await detectIntent(text, { estado: session.estado });
   } catch (err) {
     console.error('[bot] Error en detección de intención:', err.message);
-    return showFallbackMenu(phone);
+    return showFallbackMenu(phone, session.nombre);
   }
 
   const { intent, confidence, is_complaint } = result;
@@ -935,7 +935,7 @@ async function handleFreeText(phone, text, session) {
 
   // Confianza insuficiente o intención desconocida → menú
   if (confidence < INTENT_CONFIDENCE_THRESHOLD || intent === 'DESCONOCIDO') {
-    return showFallbackMenu(phone);
+    return showFallbackMenu(phone, session.nombre);
   }
 
   // ── Caso especial: queja + certificación ──────────────────────────────────

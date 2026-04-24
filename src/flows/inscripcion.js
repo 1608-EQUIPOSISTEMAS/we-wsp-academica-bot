@@ -3,6 +3,7 @@ const { updateSession }                     = require('../services/session');
 const { tagFlow }                           = require('../services/chatwoot');
 const { runTransfer }                       = require('./transfer');
 const { showMenu }                          = require('./menu');
+const { showBotCsat }                       = require('./resuelto');
 
 async function showInscripcion(phone, session) {
   updateSession(phone, { ultimoTema: 'inscripcion' });
@@ -60,9 +61,9 @@ async function handleInscripcionReply(phone, id, session) {
     case 'insc_registrado':
       await sendText(
         phone,
-        `¡Listo! Ya le pasé tu solicitud al equipo académico para que la revisen. Te avisaremos por aquí apenas tengamos novedades. 📝`
+        `¡Listo! Tu inscripción fue registrada correctamente. 📝 El equipo académico revisará tu solicitud.`
       );
-      return showMenu(phone, session.nombre);
+      return showBotCsat(phone);
 
     case 'insc_duda':
       return runTransfer(phone, session, 'Duda sobre inscripción');

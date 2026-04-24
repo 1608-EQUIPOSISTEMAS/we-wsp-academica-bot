@@ -62,27 +62,13 @@ async function tryQuickGreeting(phone) {
     ? `¡${primerNombre}! Qué gusto saludar a un miembro ${record.membership_tier} ${tierEmoji[record.membership_tier] ?? '⭐'} ¿En qué puedo ayudarte hoy?`
     : `¡${primerNombre}! 👋 Qué gusto verte de nuevo. ¿En qué puedo ayudarte hoy?`;
 
-  // Menú completo + opción "No soy yo" (máx 10 rows en WhatsApp)
-  const sections = getMenuSections();
-  // Reemplazar "Contacto asesor" por "No soy yo" para respetar el límite de 10 rows
-  const academica = sections[0];
-  const asesorIdx = academica.rows.findIndex(r => r.id === 'hablar_asesor');
-  if (asesorIdx !== -1) academica.rows.splice(asesorIdx, 1);
-  // Agregar "No soy yo" a la última sección (título máx 24 chars)
-  const noSoyTitle = `No soy ${primerNombre}`.length > 22
-    ? '🔄 No soy yo'
-    : `🔄 No soy ${primerNombre}`;
-  sections[sections.length - 1].rows.push(
-    { id: 'quick_no_soy_yo', title: noSoyTitle, description: 'Identificarme con otro correo.' }
-  );
-
   await sendList(
     phone,
     null,
     saludoTexto,
     'Selecciona una opción para continuar.',
     'Ver opciones',
-    sections
+    getMenuSections(record.nombre)
   );
 
   return true;

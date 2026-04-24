@@ -2,9 +2,16 @@ const { sendButtons, sendList } = require('../services/whatsapp');
 const { updateSession }         = require('../services/session');
 const { runTransfer }           = require('./transfer');
 
+function _firstNameTitle(fullName) {
+  if (!fullName) return '';
+  const first = String(fullName).trim().split(/\s+/)[0];
+  return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
+}
+
 // ── Secciones del menú (reutilizable) ────────────────────────────────────────
-function getMenuSections() {
-  return [
+// Si se pasa `nombre`, añade "No soy X" como última fila (máx 10 rows en total).
+function getMenuSections(nombre) {
+  const sections = [
     {
       title: '📚 Académica',
       rows: [
@@ -30,6 +37,20 @@ function getMenuSections() {
       ],
     },
   ];
+
+  if (nombre) {
+    const firstName = _firstNameTitle(nombre);
+    const noSoyTitle = `🔄 No soy ${firstName}`.length <= 24
+      ? `🔄 No soy ${firstName}`
+      : '🔄 No soy yo';
+    sections[sections.length - 1].rows.push({
+      id:          'quick_no_soy_yo',
+      title:       noSoyTitle,
+      description: 'Identificarme con otro correo.',
+    });
+  }
+
+  return sections;
 }
 
 // ── Menú principal unificado (lista con 3 secciones) ─────────────────────────
@@ -41,12 +62,12 @@ async function showMenu(phone, nombre) {
     '¿En qué más puedo ayudarte? 😊',
     'Selecciona una opción para continuar.',
     'Ver opciones',
-    getMenuSections()
+    getMenuSections(nombre)
   );
 }
 
 // ── Fallback (cuando el bot no entiende un mensaje libre) ─────────────────────
-async function showFallbackMenu(phone) {
+async function showFallbackMenu(phone, nombre) {
   updateSession(phone, { estado: 'menu' });
   await sendList(
     phone,
@@ -54,7 +75,7 @@ async function showFallbackMenu(phone) {
     'No entendí bien tu mensaje 😊\n¿En qué podemos ayudarte?',
     'Selecciona una opción para continuar.',
     'Ver opciones',
-    getMenuSections()
+    getMenuSections(nombre)
   );
 }
 

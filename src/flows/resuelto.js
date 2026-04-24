@@ -16,20 +16,23 @@ async function showBotResuelto(phone) {
   );
 }
 
+async function showBotCsat(phone) {
+  updateSession(phone, { estado: 'flow_bot_csat' });
+  await delay(500);
+  await sendButtons(
+    phone,
+    `¡Perfecto! Ha sido un gusto ayudarte hoy. ✨\n\nPara seguir mejorando, ¿cómo calificarías mi ayuda como asistente virtual? 🤖`,
+    [
+      { id: 'bot_csat_good', title: '🟢 Excelente' },
+      { id: 'bot_csat_ok',   title: '🟡 Regular' },
+      { id: 'bot_csat_bad',  title: '🔴 Mejorable' },
+    ]
+  );
+}
+
 async function handleBotResuelto(phone, buttonId, session) {
   if (buttonId === 'bot_resuelto_no') {
-    // Antes de despedirnos, pedimos calificación del bot
-    updateSession(phone, { estado: 'flow_bot_csat' });
-    await delay(500);
-    await sendButtons(
-      phone,
-      `¡Perfecto! Ha sido un gusto ayudarte hoy. ✨\n\nPara seguir mejorando, ¿cómo calificarías mi ayuda como asistente virtual? 🤖`,
-      [
-        { id: 'bot_csat_good', title: '🟢 Excelente' },
-        { id: 'bot_csat_ok',   title: '🟡 Regular' },
-        { id: 'bot_csat_bad',  title: '🔴 Mejorable' },
-      ]
-    );
+    return showBotCsat(phone);
   } else {
     // bot_resuelto_menu o cualquier otra respuesta → menú principal
     const { showMenu } = require('./menu');
@@ -38,4 +41,4 @@ async function handleBotResuelto(phone, buttonId, session) {
   }
 }
 
-module.exports = { showBotResuelto, handleBotResuelto };
+module.exports = { showBotResuelto, handleBotResuelto, showBotCsat };
