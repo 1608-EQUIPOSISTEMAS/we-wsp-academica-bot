@@ -208,7 +208,7 @@ async function _handBackToBot(phone, session) {
   updateSession(phone, {
     en_atencion_humana:         false,
     fuera_de_horario:           false,
-    estado:                     'menu',
+    estado:                     'inicio',
     transfer_replies:           0,
     asesor_respondio:           false,
     asesor_inactivity_msg_sent: false,

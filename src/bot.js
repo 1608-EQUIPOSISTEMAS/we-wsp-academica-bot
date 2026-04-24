@@ -35,6 +35,21 @@ function markProcessed(msgId) {
   setTimeout(() => processedIds.delete(msgId), MSG_ID_TTL_MS);
 }
 
+// Dedup adicional para taps interactivos:
+// Chatwoot a veces dispara dos message_created con diferente ID para el mismo tap
+// (list_reply / button_reply). Usamos phone+type+id con ventana de 15 s.
+const _processedTaps = new Map();
+const TAP_DEDUP_TTL_MS = 15_000;
+
+function _isTapDuplicate(phone, iType, iId) {
+  if (!iType || !iId) return false;
+  const key = `${phone}:${iType}:${iId}`;
+  if (_processedTaps.has(key)) return true;
+  _processedTaps.set(key, true);
+  setTimeout(() => _processedTaps.delete(key), TAP_DEDUP_TTL_MS);
+  return false;
+}
+
 // ── Mapa texto visible → id interno ──────────────────────────────────────────
 // Chatwoot envía el título del botón/fila como texto plano en lugar del id.
 // Títulos AMBIGUOS no están aquí — se resuelven por estado en route().
@@ -251,6 +266,15 @@ async function handleIncoming(conversationId, phone, msg) {
     console.log(`[bot] Mensaje duplicado ignorado: ${msg.id}`);
     return;
   }
+
+  // Dedup por tap interactivo: mismo phone+tipo+id en ventana de 15 s
+  const iType = msg.contentAttributes?.type;
+  const iId   = msg.contentAttributes?.id;
+  if (_isTapDuplicate(phone, iType, iId)) {
+    console.log(`[bot] Tap duplicado ignorado: ${phone}:${iType}:${iId}`);
+    return;
+  }
+
   markProcessed(msg.id);
 
   const isNewSession = !getSession(phone);
