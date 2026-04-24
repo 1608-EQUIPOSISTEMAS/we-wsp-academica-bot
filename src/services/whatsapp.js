@@ -193,17 +193,18 @@ async function sendButtonsWithHeader(phone, header, body, footer, buttons) {
 async function sendList(phone, header, body, footer, buttonLabel, sections) {
   ({ buttonLabel, sections } = validateWhatsAppLimits({ buttonLabel, sections }));
   // 1. Lista interactiva real via Meta API
+  const interactive = {
+    type: 'list',
+    body:   { text: body },
+    footer: { text: footer },
+    action: { button: buttonLabel, sections },
+  };
+  if (header) interactive.header = { type: 'text', text: header };
   await metaSend({
     messaging_product: 'whatsapp',
     to:   phone,
     type: 'interactive',
-    interactive: {
-      type: 'list',
-      header: { type: 'text', text: header },
-      body:   { text: body },
-      footer: { text: footer },
-      action: { button: buttonLabel, sections },
-    },
+    interactive,
   });
 
   // 2. Nota privada en Chatwoot — fire-and-forget

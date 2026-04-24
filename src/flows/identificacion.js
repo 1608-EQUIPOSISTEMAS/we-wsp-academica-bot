@@ -78,7 +78,7 @@ async function tryQuickGreeting(phone) {
 
   await sendList(
     phone,
-    'W|E Educación Ejecutiva',
+    null,
     saludoTexto,
     'Selecciona una opción para continuar.',
     'Ver opciones',
@@ -271,7 +271,7 @@ async function handleCorreo(phone, email, session) {
 
     await sendList(
       phone,
-      'W|E Educación Ejecutiva',
+      null,
       saludoTexto,
       'Selecciona una opción para continuar.',
       'Ver opciones',
